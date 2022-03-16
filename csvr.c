@@ -42,6 +42,7 @@ static void cleanup(void);
 static int get_digit(int n);
 static void headerupdate(void);
 static void refcell(void);
+static void refcmd(void);
 static void refstrl(void);
 static void setup(void);
 static void calcdim(void);
@@ -50,15 +51,17 @@ static void selectcell(int activate);
 static void usage(void);
 static void writesinglecell(int y, int x, int height, int width, char *str);
 static void writecells(void);
+static void writetextbox(void);
 
 /* Variables */
-static WINDOW *headwin, *cellwin, *strlwin;
+static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 static char sep = ',';
 static Column cols[MAX_COLUMN];
 static Row rows[MAX_ROW];
 static struct sheetparam st;
 static int height, width;
 static int textboxheight;
+static int cmdboxheight;
 static struct csv_t *csv = NULL;
 extern int errno;
 
@@ -68,6 +71,7 @@ void cleanup(void)
   delwin(cellwin);
   delwin(headwin);
   delwin(strlwin);
+  delwin(cmdwin);
 	endwin();
 }
 
@@ -150,6 +154,11 @@ void refstrl()
   wrefresh(strlwin);
 }
 
+void refcmd()
+{
+  wrefresh(cmdwin);
+}
+
 void refcell()
 {
   wrefresh(cellwin);
@@ -194,7 +203,7 @@ void calcdim()
   getmaxyx(stdscr, h, w);
   height = h; width = w;
 
-  st.cellwinheight = height - textboxheight;
+  st.cellwinheight = height - textboxheight - cmdboxheight;
   if (st.pivoty == Top) {
     st.lastRow = (st.cellwinheight - 1) + (st.begRow - 1);
   } else if (st.pivoty == Bottom) {
@@ -256,6 +265,23 @@ void selectcell(int activate)
         begin, cols[st.activeCol - 1].width - 1,
         A_NORMAL, activate + 1, NULL);
   }
+  writetextbox();
+}
+
+void writetextbox(void)
+{
+  wmove(strlwin, 0, 0);
+  wclrtoeol(strlwin);
+
+  if (!csv)
+    return;
+
+  if (csv->nlines < st.activeRow || csv->lines[0]->nfields < st.activeCol)
+    return;
+
+  for (int i = 0; i < st.pad; i++)
+    wprintw(strlwin, " ");
+  wprintw(strlwin, "%s", csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
 }
 
 void movecell(int y, int x)
@@ -312,6 +338,7 @@ void setup()
 {
   initscr();
   textboxheight = 1;
+  cmdboxheight = 1;
 	start_color();
 	init_pair(1, FG_COLOR, BG_COLOR);
 	init_pair(2, BG_COLOR, FG_COLOR);
@@ -339,19 +366,21 @@ void setup()
   calcdim();
 
   strlwin = newwin(textboxheight, width, 0, 0);
-  headwin = newwin(height - 1, width, textboxheight, 0);
-  cellwin = newwin(height - (textboxheight + 1), width - st.pad, textboxheight + 1, st.pad); /* 1 is the size of header */
+  headwin = newwin(height - 2, width, textboxheight, 0);
+  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, textboxheight + 1, st.pad); /* 1 is the size of header */
+  cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
 
 	wbkgd(stdscr, COLOR_PAIR(1));
 	wbkgd(stdscr, COLOR_PAIR(2));
 	wbkgd(strlwin, COLOR_PAIR(3));
 	wbkgd(headwin, COLOR_PAIR(4));
-
+	wbkgd(cmdwin, COLOR_PAIR(3));
 
   writecells();
 
   refresh();
   headerupdate();
+  refcmd();
   refcell();
   refstrl();
 }
@@ -405,6 +434,7 @@ int main(int argc, char **argv)
     writecells();
     refresh();
     headerupdate();
+    refcmd();
     refcell();
     refstrl();
   }
