@@ -165,26 +165,27 @@ void writesinglecell(int y, int x, int height, int width, char *str)
 
 void writecells()
 {
-  werase(cellwin);
-  selectcell(1);
   if (!csv) {
+    selectcell(1);
     return;
   }
 
+  werase(cellwin);
   for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < csv->nlines - st.begRow + 1; i++) {
     int cellheight = rows[st.begCol + i - 1].height;
     for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < csv->lines[i]->nfields - st.begCol + 1; j++) {
       int cellwidth;
       if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
-        cellwidth = cols[st.begRow + i - 1].width - st.xcov;
+        cellwidth = cols[st.begCol + j - 1].width - st.xcov;
       else
-        cellwidth = cols[st.begRow + i - 1].width;
+        cellwidth = cols[st.begCol + j - 1].width;
       writesinglecell(yt, xt, cellheight, cellwidth,
           csv->lines[st.begRow + i - 1]->fields[st.begCol + j - 1]);
       xt += cellwidth;
     }
     yt += cellheight;
   }
+  selectcell(1);
 }
 
 void calcdim()
@@ -202,9 +203,12 @@ void calcdim()
 
   if (cellwin && st.pad - (get_digit(st.lastRow) + 1)) {
     st.pad = get_digit(st.lastRow) + 1;
-    st.cellwinwidth = width - st.pad;
-    delwin(cellwin);
-    cellwin = newwin(height - (textboxheight + 1), width - st.pad, textboxheight + 1, st.pad); /* 1 is the size of header */
+    int widthtemp = width - st.pad;
+    if (st.cellwinwidth - widthtemp) {
+      delwin(cellwin);
+      cellwin = newwin(height - (textboxheight + 1), width - st.pad, textboxheight + 1, st.pad); /* 1 is the size of header */
+      st.cellwinwidth = widthtemp;
+    }
   } else {
     st.pad = get_digit(st.lastRow) + 1;
     st.cellwinwidth = width - st.pad;
@@ -331,6 +335,7 @@ void setup()
     cols[i].width = CELL_WIDTH;
   }
 
+  //debug();
   calcdim();
 
   strlwin = newwin(textboxheight, width, 0, 0);
@@ -342,7 +347,6 @@ void setup()
 	wbkgd(strlwin, COLOR_PAIR(3));
 	wbkgd(headwin, COLOR_PAIR(4));
 
-  //debug();
 
   writecells();
 
