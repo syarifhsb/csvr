@@ -361,17 +361,6 @@ void movecell(int y, int x)
   selectcell(1);
 }
 
-void debug(void)
-{
-  cols[2].width = 10;
-  cols[3].width = 14;
-  cols[7].width = 5;
-
-  mvwprintw(cellwin, 1, 25, "Debug. st.begCol: %d, st.lastCol: %d", st.begCol, st.lastCol); /* debug */
-  mvwprintw(cellwin, 2, 25, "Debug. st.begRow: %d, st.lastRow: %d", st.begRow, st.lastRow); /* debug */
-  mvwprintw(cellwin, 3, 25, "Debug. st.cellwinheight: %d, st.cellwinwidth: %d", st.cellwinheight, st.cellwinwidth); /* debug */
-}
-
 void setup()
 {
   initscr();
@@ -400,7 +389,6 @@ void setup()
     cols[i].width = CELL_WIDTH;
   }
 
-  debug();
   calcdim();
 
   strlwin = newwin(textboxheight, width, 0, 0);
@@ -442,6 +430,7 @@ int main(int argc, char **argv)
       fprintf(stderr, "ERROR. %s: \'%s\'\n", strerror(errno), *(argv + 1));
       exit(1);
     }
+    /* TODO: Separator as user input */
     csv = parse_csv(csv_file, sep);
     fclose(csv_file);
   }
@@ -490,7 +479,7 @@ int main(int argc, char **argv)
         resizecell(0, 0);
         break;
     }
-    //debug();
+
     writecells();
     refresh();
     headerupdate();
