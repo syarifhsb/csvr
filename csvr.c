@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
+#include <ctype.h>
+#include <unistd.h>
 
 #include "parser.h"
 #include "config.h"
@@ -413,24 +415,48 @@ void setup()
 
 void usage(void)
 {
-  fprintf(stdout, "Usage: csvr <file.csv>\n");
+  fprintf(stdout, "Usage: csvr [OPTION] [FILE.csv]\n");
+  fprintf(stdout, "Options:\n");
+  fprintf(stdout, "-t[char]\tchoose separator (comma by default)\n");
+  fprintf(stdout, "-h\t\tshow this help\n");
 }
 
 int main(int argc, char **argv)
 {
   FILE *csv_file;
+  int chopt;
 
-  if (argc > 2) {
-    usage();
-    exit(0);
-  }
-  if (argc == 2) {
-    csv_file = fopen(*(argv + 1), "r");
+  opterr = 0;
+  while ((chopt = getopt(argc, argv, "t:")) != -1)
+    switch (chopt) {
+      case 't':
+        if (optarg[1] != '\0') {
+          fprintf(stderr, "Multi-character separator currently not supported\n");
+          exit(1);
+        }
+        sep = optarg[0];
+        break;
+      case '?':
+        if (optopt == 't')
+          fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+        else if (isprint (optopt))
+          fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+        else
+          fprintf (stderr,
+              "Unknown option character `\\x%x'.\n",
+              optopt);
+        usage();
+        exit(1);
+      default:
+        exit(0);
+    }
+
+  if ((argc - optind) > 0) {
+    csv_file = fopen(*(argv + optind), "r");
     if (!csv_file) {
-      fprintf(stderr, "ERROR. %s: \'%s\'\n", strerror(errno), *(argv + 1));
+      fprintf(stderr, "Error. %s: \'%s\'\n", strerror(errno), *(argv + 1));
       exit(1);
     }
-    /* TODO: Separator as user input */
     csv = parse_csv(csv_file, sep);
     fclose(csv_file);
   }
