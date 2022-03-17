@@ -36,8 +36,6 @@ typedef struct Row {
 } Row;
 
 /* Functions declarations */
-//static Column* alloccol(int n);
-//static Row* allocrow(int n);
 static void cleanup(void);
 static int get_digit(int n);
 static void headerupdate(void);
@@ -52,6 +50,7 @@ static void usage(void);
 static void writesinglecell(int y, int x, int height, int width, char *str);
 static void writecells(void);
 static void writetextbox(void);
+static void resizecell(int y, int x);
 
 /* Variables */
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
@@ -73,6 +72,9 @@ void cleanup(void)
   delwin(strlwin);
   delwin(cmdwin);
 	endwin();
+
+  if (csv)
+    destroy_csv(csv);
 }
 
 /* TODO: Reformat for more readability */
@@ -284,6 +286,38 @@ void writetextbox(void)
   wprintw(strlwin, "%s", csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
 }
 
+int getstrlength(char *s)
+{
+  int count = 0;
+
+  while (s[count] != '\0')
+    count++;
+
+  return count;
+}
+
+void resizecell(int y, int x)
+{
+  rows[st.activeRow - 1].height += y;
+  cols[st.activeCol - 1].width += x;
+
+  if (!y && !x) {
+    if (csv)
+      if (csv->nlines > st.activeRow && csv->lines[0]->nfields > st.activeCol) {
+        int len =  getstrlength(csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
+        cols[st.activeCol - 1].width = len + 1;
+      }
+  }
+
+  if (rows[st.activeRow - 1].height < 1)
+    rows[st.activeRow - 1].height = 1;
+
+  if (cols[st.activeCol - 1].width < 3)
+    cols[st.activeCol - 1].width = 2;
+
+  calcdim();
+}
+
 void movecell(int y, int x)
 {
   selectcell(0);
@@ -293,12 +327,14 @@ void movecell(int y, int x)
 
   if (st.activeRow <= 0) {
     st.activeRow = 1;
+    st.begRow = 1;
     st.pivoty = Top;
   } else if (st.activeRow <= st.begRow) {
     st.begRow = st.activeRow;
     st.pivoty = Top;
   } else if (st.activeRow > MAX_ROW) {
     st.activeRow = MAX_ROW;
+    st.lastRow = MAX_ROW;
     st.pivoty = Bottom;
   } else if (st.activeRow >= st.lastRow) {
     st.lastRow = st.activeRow;
@@ -307,12 +343,14 @@ void movecell(int y, int x)
 
   if (st.activeCol <= 0) {
     st.activeCol = 1;
+    st.lastCol = 1;
     st.pivotx = Left;
   } else if (st.activeCol <= st.begCol) {
     st.begCol = st.activeCol;
     st.pivotx = Left;
   } else if (st.activeCol > MAX_COLUMN) {
     st.activeCol = MAX_COLUMN;
+    st.lastCol = MAX_COLUMN;
     st.pivotx = Right;
   } else if (st.activeCol >= st.lastCol) {
     st.lastCol = st.activeCol;
@@ -362,7 +400,7 @@ void setup()
     cols[i].width = CELL_WIDTH;
   }
 
-  //debug();
+  debug();
   calcdim();
 
   strlwin = newwin(textboxheight, width, 0, 0);
@@ -413,6 +451,7 @@ int main(int argc, char **argv)
   while ((c = getch()) != 'q') {
     switch (c)
     {
+      /* TODO: Create a Key Struct */
 			case 'h':
 			case KEY_LEFT:
 				movecell(0, -1);
@@ -429,6 +468,27 @@ int main(int argc, char **argv)
 			case KEY_DOWN:
 				movecell(1,  0);
 				break;
+			case '':
+				movecell(0,  -5);
+				break;
+			case '':
+				movecell(0,  5);
+				break;
+			case '':
+				movecell(-10,  0);
+				break;
+			case '':
+				movecell(10,  0);
+				break;
+      case '+':
+        resizecell(0, 1);
+        break;
+      case '-':
+        resizecell(0, -1);
+        break;
+      case '=':
+        resizecell(0, 0);
+        break;
     }
     //debug();
     writecells();
@@ -439,8 +499,6 @@ int main(int argc, char **argv)
     refstrl();
   }
 
-  if (csv)
-    destroy_csv(csv);
   cleanup();
   return 0;
 }
