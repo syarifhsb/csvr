@@ -1,4 +1,4 @@
-CC       = gcc
+CC       = gcc --std=gnu99
 SRC      = csvr.c parser.c
 OBJ      = ${SRC:.c=.o}
 OBJDEBUG = ${SRC:.c=debug.o}

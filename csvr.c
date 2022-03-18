@@ -15,7 +15,8 @@
 
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
-enum { Left, Right }; /* Pivot X */
+enum { Left, Right };  /* Pivot X */
+enum { Normal, NormalCell, Insert, Command };  /* Mode */
 
 struct sheetparam {
   int cellwinheight;
@@ -38,8 +39,8 @@ typedef struct Row {
 } Row;
 
 /* Functions declarations */
-static void cleanup(void);
 static int get_digit(int n);
+static void cleanup(void);
 static void headerupdate(void);
 static void refcell(void);
 static void refcmd(void);
@@ -394,9 +395,10 @@ void setup()
   calcdim();
 
   strlwin = newwin(textboxheight, width, 0, 0);
-  headwin = newwin(height - 2, width, textboxheight, 0);
-  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, textboxheight + 1, st.pad); /* 1 is the size of header */
   cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
+  headwin = newwin(height - 2, width, textboxheight, 0);
+  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
+      textboxheight + 1, st.pad); /* 1 is the size of header */
 
 	wbkgd(stdscr, COLOR_PAIR(1));
 	wbkgd(stdscr, COLOR_PAIR(2));
@@ -457,7 +459,7 @@ int main(int argc, char **argv)
       fprintf(stderr, "Error. %s: \'%s\'\n", strerror(errno), *(argv + 1));
       exit(1);
     }
-    csv = parse_csv(csv_file, sep);
+    csv = parse_csv_blk(csv_file, sep, MAX_ROW, MAX_COLUMN);
     fclose(csv_file);
   }
 
