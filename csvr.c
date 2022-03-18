@@ -228,22 +228,27 @@ void calcdim()
     st.cellwinwidth = width - st.pad;
   }
 
+  int j, colswidth;
+  if (st.pivotx == Right) {
+    for (j = st.lastCol, colswidth = 0;
+        colswidth < st.cellwinwidth;
+        colswidth += cols[j - 1].width, j--) 
+    {
+      st.xcov = cols[j - 1].width - (st.cellwinwidth - colswidth);
+    }
+    if (j < 0)
+      st.pivotx = Left;
+    else
+      st.begCol = j + 1;
+  }
   if (st.pivotx == Left) {
-    for (int j = st.begCol, colswidth = 0;
+    for (j = st.begCol, colswidth = 0;
         colswidth < st.cellwinwidth;
-        colswidth += cols[j - 1].width, j++)
+        colswidth += cols[j - 1].width, j++) 
     {
-      st.lastCol = j;
       st.xcov = cols[j - 1].width - (st.cellwinwidth - colswidth);
     }
-  } else if (st.pivotx == Right) {
-    for (int j = st.lastCol, colswidth = 0;
-        colswidth < st.cellwinwidth;
-        colswidth += cols[j - 1].width, j--)
-    {
-      st.begCol = j;
-      st.xcov = cols[j - 1].width - (st.cellwinwidth - colswidth);
-    }
+    st.lastCol = j - 1;
   }
 }
 
@@ -415,6 +420,30 @@ void setup()
   refstrl();
 }
 
+void repaint(void)
+{
+  delwin(cellwin);
+  delwin(headwin);
+  delwin(strlwin);
+  delwin(cmdwin);
+
+  calcdim();
+
+  strlwin = newwin(textboxheight, width, 0, 0);
+  cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
+  headwin = newwin(height - 2, width, textboxheight, 0);
+  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
+      textboxheight + 1, st.pad); /* 1 is the size of header */
+
+	wbkgd(stdscr, COLOR_PAIR(1));
+	wbkgd(stdscr, COLOR_PAIR(2));
+	wbkgd(strlwin, COLOR_PAIR(3));
+	wbkgd(headwin, COLOR_PAIR(4));
+	wbkgd(cmdwin, COLOR_PAIR(3));
+
+  writecells();
+}
+
 void usage(void)
 {
   fprintf(stdout, "Usage: csvr [OPTION] [FILE.csv]\n");
@@ -468,7 +497,9 @@ int main(int argc, char **argv)
   while ((c = getch()) != 'q') {
     switch (c)
     {
-      /* TODO: Create a Key Struct */
+      case KEY_RESIZE:
+        repaint();
+        break;
 			case 'h':
 			case KEY_LEFT:
 				movecell(0, -1);
@@ -485,10 +516,10 @@ int main(int argc, char **argv)
 			case KEY_DOWN:
 				movecell(1,  0);
 				break;
-			case '':
+			case 'B':
 				movecell(0,  -5);
 				break;
-			case '':
+			case 'W':
 				movecell(0,  5);
 				break;
 			case '':
