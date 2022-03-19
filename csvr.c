@@ -54,6 +54,7 @@ static void writesinglecell(int y, int x, int height, int width, char *str);
 static void writecells(void);
 static void writetextbox(void);
 static void resizecell(int y, int x);
+static void repaint(void);
 
 /* Variables */
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
@@ -219,10 +220,7 @@ void calcdim()
     st.pad = get_digit(st.lastRow) + 1;
     int widthtemp = width - st.pad;
     if (st.cellwinwidth - widthtemp) {
-      delwin(cellwin);
-      /* TODO: Create subroutine to recreate cell window */
-      cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
-          textboxheight + 1, st.pad); /* 1 is the size of header */
+      repaint();
       st.cellwinwidth = widthtemp;
     }
   } else {
