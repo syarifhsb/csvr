@@ -220,7 +220,9 @@ void calcdim()
     int widthtemp = width - st.pad;
     if (st.cellwinwidth - widthtemp) {
       delwin(cellwin);
-      cellwin = newwin(height - (textboxheight + 1), width - st.pad, textboxheight + 1, st.pad); /* 1 is the size of header */
+      /* TODO: Create subroutine to recreate cell window */
+      cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
+          textboxheight + 1, st.pad); /* 1 is the size of header */
       st.cellwinwidth = widthtemp;
     }
   } else {
