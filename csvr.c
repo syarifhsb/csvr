@@ -1,22 +1,22 @@
 #include <ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <errno.h>
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "parser.h"
 #include "config.h"
 
 /* Macros */
-#define LENGTH(X)               (sizeof X / sizeof X[0])
+#define LENGTH(X)         (sizeof X / sizeof X[0])
 
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
 enum { Left, Right };  /* Pivot X */
-enum { Normal, NormalCell, Insert, Command, Quit };  /* Mode */
+enum { Normal, NormalCell, Insert, Command, Quit };  /* Program Mode */
 
 struct sheetparam {
   int cellwinheight;
@@ -53,6 +53,7 @@ static void writetextbox(void);
 static void resizecell(int y, int x);
 static void repaint(void);
 static void commandmode(void);
+static void handlesig(int signal);
 
 /* Variables */
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
@@ -314,6 +315,8 @@ void commandmode(void)
   while (csvr_state  == Command) {
     ch = wgetch(cmdwin);
     switch (ch) {
+      case ERR:
+        break;
       case 10:
       case KEY_ENTER:
         csvr_state = Normal;
@@ -404,8 +407,15 @@ void movecell(int y, int x)
   selectcell(1);
 }
 
+void handlesig(int signal)
+{
+  if (csvr_state == Command)
+    csvr_state = Normal;
+}
+
 void setup()
 {
+  signal(SIGINT, handlesig);
   initscr();
   textboxheight = 1;
   cmdboxheight = 1;
@@ -417,6 +427,7 @@ void setup()
 	keypad(stdscr, TRUE);
 	curs_set(0);
   noecho();
+  halfdelay(255);
 
   st.nrow = 1; st.ncol = 1;
   st.activeRow = 1; st.activeCol = 1;
