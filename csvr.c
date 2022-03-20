@@ -16,7 +16,7 @@
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
 enum { Left, Right };  /* Pivot X */
-enum { Normal, NormalCell, Insert, Command };  /* Mode */
+enum { Normal, NormalCell, Insert, Command, Quit };  /* Mode */
 
 struct sheetparam {
   int cellwinheight;
@@ -42,9 +42,6 @@ typedef struct Row {
 static int get_digit(int n);
 static void cleanup(void);
 static void headerupdate(void);
-static void refcell(void);
-static void refcmd(void);
-static void refstrl(void);
 static void setup(void);
 static void calcdim(void);
 static void movecell(int y, int x);
@@ -55,6 +52,7 @@ static void writecells(void);
 static void writetextbox(void);
 static void resizecell(int y, int x);
 static void repaint(void);
+static void commandmode(void);
 
 /* Variables */
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
@@ -66,6 +64,7 @@ static int height, width;
 static int textboxheight;
 static int cmdboxheight;
 static struct csv_t *csv = NULL;
+static int csvr_state;
 extern int errno;
 
 /* Function implementations */
@@ -153,21 +152,6 @@ void headerupdate()
   wprintw(headwin, "|");
 
   wrefresh(headwin);
-}
-
-void refstrl()
-{
-  wrefresh(strlwin);
-}
-
-void refcmd()
-{
-  wrefresh(cmdwin);
-}
-
-void refcell()
-{
-  wrefresh(cellwin);
 }
 
 void writesinglecell(int y, int x, int height, int width, char *str)
@@ -280,8 +264,7 @@ void selectcell(int activate)
 
 void writetextbox(void)
 {
-  wmove(strlwin, 0, 0);
-  wclrtoeol(strlwin);
+  wmove(strlwin, 0, 0); wclrtoeol(strlwin);
 
   if (!csv)
     return;
@@ -302,6 +285,58 @@ int getstrlength(char *s)
     count++;
 
   return count;
+}
+
+int strcicmp(char const *a, char const *b)
+{
+  for (;; a++, b++) {
+    int d = tolower((unsigned char)*a) - tolower((unsigned char)*b);
+    if (d != 0 || !*a)
+      return d;
+  }
+}
+
+int processcommand(char *cmd)
+{
+  if (!strcicmp("q", cmd))
+    csvr_state = Quit;
+  return 0;
+}
+
+void commandmode(void)
+{
+  char *str = calloc(256, sizeof(char));
+  int ch;
+  werase(cmdwin);
+  curs_set(1);
+  mvwprintw(cmdwin, 0, 0, ":");
+  int i = 0;
+  while (csvr_state  == Command) {
+    ch = wgetch(cmdwin);
+    switch (ch) {
+      case 10:
+      case KEY_ENTER:
+        csvr_state = Normal;
+        processcommand(str);
+        break;
+      case KEY_BACKSPACE:
+      case '':
+        if (i < 1)
+          break;
+        mvwprintw(cmdwin, 0, i, " ");
+        wmove(cmdwin, 0, i);
+        i--;
+        str[i] = '\0';
+        break;
+      default:
+        ch = keyname(ch)[0];
+        waddch(cmdwin, ch);
+        str[i] = ch;
+        i++;
+    }
+  }
+  curs_set(0);
+  free(str);
 }
 
 void resizecell(int y, int x)
@@ -415,9 +450,9 @@ void setup()
 
   refresh();
   headerupdate();
-  refcmd();
-  refcell();
-  refstrl();
+  wrefresh(cmdwin);
+  wrefresh(cellwin);
+  wrefresh(strlwin);
 }
 
 void repaint(void)
@@ -494,8 +529,10 @@ int main(int argc, char **argv)
 
   unsigned int c;
   setup();
-  while ((c = getch()) != 'q') {
-    switch (c)
+  csvr_state = Normal;
+
+  while (csvr_state != Quit) {
+    switch (c = getch())
     {
       case KEY_RESIZE:
         repaint();
@@ -537,14 +574,18 @@ int main(int argc, char **argv)
       case '=':
         resizecell(0, 0);
         break;
+      case ':':
+        csvr_state = Command;
+        commandmode();
+        break;
     }
 
     writecells();
     refresh();
     headerupdate();
-    refcmd();
-    refcell();
-    refstrl();
+    wrefresh(cmdwin);
+    wrefresh(cellwin);
+    wrefresh(strlwin);
   }
 
   cleanup();
