@@ -57,7 +57,7 @@ static void handlesig(int signal);
 
 /* Variables */
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
-static char sep = ',';
+static char sep = '\0';
 static Column cols[MAX_COLUMN];
 static Row rows[MAX_ROW];
 static struct sheetparam st;
@@ -494,8 +494,8 @@ void usage(void)
 {
   fprintf(stdout, "Usage: csvr [OPTION] [FILE.csv]\n");
   fprintf(stdout, "Options:\n");
-  fprintf(stdout, "-t[char]\tchoose separator (comma by default)\n");
-  fprintf(stdout, "-h\t\tshow this help\n");
+  fprintf(stdout, "\t-t\tchoose separator\n");
+  fprintf(stdout, "\t-h\tshow this help\n");
 }
 
 int main(int argc, char **argv)
@@ -528,7 +528,12 @@ int main(int argc, char **argv)
         exit(0);
     }
 
-  if ((argc - optind) > 0) {
+  if (!sep && ((argc - optind) > 0)) {
+    printf("Warning. The separator is not set.\n");
+    printf("Please press ENTER to continue\n");
+    int ch;
+    while ((ch = fgetc(stdin)) != 10) {}
+  } else if ((argc - optind) > 0) {
     csv_file = fopen(*(argv + optind), "r");
     if (!csv_file) {
       fprintf(stderr, "Error. %s: \'%s\'\n", strerror(errno), *(argv + 1));
