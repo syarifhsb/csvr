@@ -528,12 +528,13 @@ int main(int argc, char **argv)
         exit(0);
     }
 
-  if (!sep && ((argc - optind) > 0)) {
-    printf("Warning. The separator is not set.\n");
-    printf("Please press ENTER to continue\n");
-    int ch;
-    while ((ch = fgetc(stdin)) != 10) {}
-  } else if ((argc - optind) > 0) {
+  if ((argc - optind) > 0) {
+    if (!sep) {
+      printf("Warning. The separator is not set.\n");
+      printf("Please press ENTER to continue\n");
+      int ch;
+      while ((ch = fgetc(stdin)) != 10) {}
+    }
     csv_file = fopen(*(argv + optind), "r");
     if (!csv_file) {
       fprintf(stderr, "Error. %s: \'%s\'\n", strerror(errno), *(argv + 1));
