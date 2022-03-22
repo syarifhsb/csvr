@@ -158,7 +158,8 @@ void headerupdate()
 void writesinglecell(int y, int x, int height, int width, char *str)
 {
   /* TODO: Wrap text when have row height > 1 */
-  char temp[width];
+  /* TODO: Deal with memory alloc */
+  char temp[MAX_STRING_LENGTH];
   snprintf(temp, width, str);
   mvwprintw(cellwin, y, x, "%s", temp);
 }
@@ -248,7 +249,7 @@ void selectcell(int activate)
       begin += cols[j - 1].width;
     }
     mvwchgat(cellwin, st.activeRow - st.begRow, 
-        begin, cols[st.activeCol - 1].width - 1,
+        begin, cols[st.activeCol - 1].width,
         A_NORMAL, activate + 1, NULL);
   }
   else if (st.pivotx == Right) {
@@ -257,7 +258,7 @@ void selectcell(int activate)
       begin -= cols[j - 1].width;
     }
     mvwchgat(cellwin, st.activeRow - st.begRow, 
-        begin, cols[st.activeCol - 1].width - 1,
+        begin, cols[st.activeCol - 1].width,
         A_NORMAL, activate + 1, NULL);
   }
   writetextbox();
