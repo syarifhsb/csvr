@@ -8,15 +8,15 @@
 #include <signal.h>
 
 #include "parser.h"
-#include "config.h"
 
 /* Macros */
 #define LENGTH(X)         (sizeof X / sizeof X[0])
+#define CTRL(X)           ((X) & 0x1f)
 
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
 enum { Left, Right };  /* Pivot X */
-enum { Normal, NormalCell, Insert, Command, Quit };  /* Program Mode */
+enum { NoChange = 0, Normal, NormalCell, Insert, Command, Quit };  /* Program Mode */
 
 struct sheetparam {
   int cellwinheight;
@@ -34,161 +34,69 @@ typedef struct {
   int width;
 } Column;
 
-typedef struct Row {
+typedef struct {
   int height;
 } Row;
 
+typedef union {
+	int i;
+	unsigned int ui;
+	float f;
+	const void *v;
+} Arg;
+
+typedef struct {
+  int ch;
+  int nextst;
+  void (*func)(const Arg *);
+  const Arg arg;
+} Key;
+
 /* Functions declarations */
-static int get_digit(int n);
-static void cleanup(void);
-static void headerupdate(void);
-static void setup(void);
 static void calcdim(void);
-static void movecell(int y, int x);
-static void selectcell(int activate);
-static void usage(void);
-static void writesinglecell(int y, int x, int height, int width, char *str);
-static void writecells(void);
-static void writetextbox(void);
-static void resizecell(int y, int x);
-static void repaint(void);
-static void commandmode(void);
+static void cleanup(void);
+static void cmddel(const Arg *arg);
+static void cmddo(const Arg *arg);
+static void cmdput(int ch);
+static void cmdstart(const Arg *arg);
+static void csvr_resize(const Arg *arg);
 static void handlesig(int signal);
+static void headerupdate(void);
+static void keypress(int ch);
+static void movecell(int y, int x);
+static void movex(const Arg *arg);
+static void movey(const Arg *arg);
+static void repaint(void);
+static void resizecell(int y, int x);
+static void resizecellx(const Arg *arg);
+static void selectcell(int activate);
+static void setup(void);
+static void usage(void);
+static void writecells(void);
+static void writesinglecell(int y, int x, int height, int width, char *str);
+static void writetextbox(void);
+int get_digit(int n);
+int getstrlength(char *s);
+int strcicmp(char const *a, char const *b);
+
+#include "config.h"
 
 /* Variables */
-static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
+static char cmdstr[CMD_MAX_CHAR];
 static char sep = '\0';
 static Column cols[MAX_COLUMN];
-static Row rows[MAX_ROW];
-static struct sheetparam st;
-static int height, width;
-static int textboxheight;
 static int cmdboxheight;
-static struct csv_t *csv = NULL;
+static int cmdstrlen = 0;
 static int csvr_state;
 extern int errno;
+static int height, width;
+static int textboxheight;
+static Row rows[MAX_ROW];
+static struct csv_t *csv = NULL;
+static struct sheetparam st;
+static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 
 /* Function implementations */
-void cleanup(void)
-{
-  delwin(cellwin);
-  delwin(headwin);
-  delwin(strlwin);
-  delwin(cmdwin);
-	endwin();
-
-  if (csv)
-    destroy_csv(csv);
-}
-
-/* TODO: Reformat for more readability */
-void printcolindex(int i, int b, int w)
-{
-  /* Column index is limited to ZZ. 3 digit not possible */
-  if (i > MAX_COLUMN - 1)
-    return;
-
-  if (i / 26) {
-    if ((b + w/2 - 1) >= 0)
-      mvwprintw(headwin, 0, b + w/2 - 1, "%c", 64 + (i / 26));
-  }
-  if ((b + w/2) >= 0)
-    mvwprintw(headwin, 0, b + w/2, "%c", 65 + (i % 26));
-}
-
-int get_digit(int n)
-{
-  unsigned short d = 0;
-  while(n != 0){
-    n = n / 10;
-    d++;
-  }
-  if(d == 0){
-    d = 1;
-  }
-  return d;
-}
-
-void headerupdate()
-{
-  int i, j;
-
-  /* TODO: Row height != 1 */
-  for (i = 0; i <= st.lastRow - st.begRow; i++){
-    wmove(headwin, i + 1, 0);
-    for (j = 0; j < st.pad - (1 + get_digit(st.begRow + i)); j++){
-      wprintw(headwin, " ");
-    }
-    wprintw(headwin, "%d|", st.begRow + i);
-  }
-
-  wmove(headwin, 0, 0);
-  wclrtoeol(headwin);
-  int begin;
-  if (st.pivotx == Left) {
-    begin = st.pad;
-    for (j = st.begCol; j <= st.lastCol; j++) {
-      printcolindex(j - 1, begin, cols[j - 1].width);
-      mvwprintw(headwin, 0, begin + cols[j - 1].width - 1, "|");
-      begin += cols[j - 1].width;
-    }
-  } else if (st.pivotx == Right) {
-    begin = width;
-    for (j = st.lastCol; j >= st.begCol; j--) {
-      begin -= cols[j - 1].width;
-      /* TODO: Potential bug */
-      //if (begin < 0) {
-      //  mvwprintw(headwin, 0, begin + cols[j - 1].width - 1, "|");
-      //  break;
-      //}
-      printcolindex(j - 1, begin, cols[j - 1].width);
-      mvwprintw(headwin, 0, begin + cols[j - 1].width - 1, "|");
-    }
-  }
-
-  wmove(headwin, 0, 0);
-  for (j = 0; j < st.pad - 1; j++) {
-    wprintw(headwin, " ");
-  }
-  wprintw(headwin, "|");
-
-  wrefresh(headwin);
-}
-
-void writesinglecell(int y, int x, int height, int width, char *str)
-{
-  /* TODO: Wrap text when have row height > 1 */
-  /* TODO: Deal with memory alloc */
-  char temp[MAX_STRING_LENGTH];
-  snprintf(temp, width, str);
-  mvwprintw(cellwin, y, x, "%s", temp);
-}
-
-void writecells()
-{
-  if (!csv) {
-    selectcell(1);
-    return;
-  }
-
-  werase(cellwin);
-  for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < csv->nlines - st.begRow + 1; i++) {
-    int cellheight = rows[st.begCol + i - 1].height;
-    for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < csv->lines[i]->nfields - st.begCol + 1; j++) {
-      int cellwidth;
-      if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
-        cellwidth = cols[st.begCol + j - 1].width - st.xcov;
-      else
-        cellwidth = cols[st.begCol + j - 1].width;
-      writesinglecell(yt, xt, cellheight, cellwidth,
-          csv->lines[st.begRow + i - 1]->fields[st.begCol + j - 1]);
-      xt += cellwidth;
-    }
-    yt += cellheight;
-  }
-  selectcell(1);
-}
-
 void calcdim()
 {
   int h, w;
@@ -238,131 +146,169 @@ void calcdim()
   }
 }
 
-void selectcell(int activate)
+void cleanup(void)
 {
-  int begin;
-  int j;
-  /* TODO: Row height != 1 */
-  if (st.pivotx == Left) {
-    begin = 0;
-    for (j = st.begCol; j < st.activeCol; j++) {
-      begin += cols[j - 1].width;
-    }
-    mvwchgat(cellwin, st.activeRow - st.begRow, 
-        begin, cols[st.activeCol - 1].width,
-        A_NORMAL, activate + 1, NULL);
-  }
-  else if (st.pivotx == Right) {
-    begin = st.cellwinwidth;
-    for (j = st.lastCol; j >= st.activeCol; j--) {
-      begin -= cols[j - 1].width;
-    }
-    mvwchgat(cellwin, st.activeRow - st.begRow, 
-        begin, cols[st.activeCol - 1].width,
-        A_NORMAL, activate + 1, NULL);
-  }
-  writetextbox();
+  delwin(cellwin);
+  delwin(headwin);
+  delwin(strlwin);
+  delwin(cmdwin);
+	endwin();
+
+  if (csv)
+    destroy_csv(csv);
 }
 
-void writetextbox(void)
+void cmddel(const Arg *arg)
 {
-  wmove(strlwin, 0, 0); wclrtoeol(strlwin);
-
-  if (!csv)
-    return;
-
-  if (csv->nlines < st.activeRow || csv->lines[0]->nfields < st.activeCol)
-    return;
-
-  for (int i = 0; i < st.pad; i++)
-    wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
-}
-
-int getstrlength(char *s)
-{
-  int count = 0;
-
-  while (s[count] != '\0')
-    count++;
-
-  return count;
-}
-
-int strcicmp(char const *a, char const *b)
-{
-  for (;; a++, b++) {
-    int d = tolower((unsigned char)*a) - tolower((unsigned char)*b);
-    if (d != 0 || !*a)
-      return d;
+  if (cmdstrlen <= 0) {
+    cmdstrlen = 0;
+    cmdstr[0] = '\0';
+  } else {
+    cmdstrlen--;
+    mvwprintw(cmdwin, 0, cmdstrlen + 1, " ");
+    wmove(cmdwin, 0, cmdstrlen + 1);
   }
 }
 
-int processcommand(char *cmd)
+void cmddo(const Arg *arg)
 {
-  if (!strcicmp("q", cmd))
+  /* Do Command */
+  if (!strcicmp("q", cmdstr))
     csvr_state = Quit;
-  return 0;
+  curs_set(0);
 }
 
-void commandmode(void)
+void cmdput(int ch)
 {
-  char *str = calloc(256, sizeof(char));
-  int ch;
+  if (cmdstrlen >= CMD_MAX_CHAR - 1) {
+    cmdstrlen = CMD_MAX_CHAR - 1;
+    cmdstr[CMD_MAX_CHAR - 1] = '\0';
+  } else {
+    cmdstrlen++;
+    waddch(cmdwin, ch);
+    cmdstr[cmdstrlen - 1] = ch;
+    cmdstr[cmdstrlen] = '\0';
+  }
+}
+
+void cmdstart(const Arg *arg)
+{
   werase(cmdwin);
   curs_set(1);
   mvwprintw(cmdwin, 0, 0, ":");
-  int i = 0;
-  while (csvr_state  == Command) {
-    ch = wgetch(cmdwin);
-    switch (ch) {
-      case ERR:
-        break;
-      case 10:
-      case KEY_ENTER:
-        csvr_state = Normal;
-        processcommand(str);
-        break;
-      case KEY_BACKSPACE:
-      case '':
-        if (i < 1)
-          break;
-        mvwprintw(cmdwin, 0, i, " ");
-        wmove(cmdwin, 0, i);
-        i--;
-        str[i] = '\0';
-        break;
-      default:
-        ch = keyname(ch)[0];
-        waddch(cmdwin, ch);
-        str[i] = ch;
-        i++;
-    }
-  }
-  curs_set(0);
-  free(str);
+  cmdstr[0] = '\0';
+  cmdstrlen = 0;
 }
 
-void resizecell(int y, int x)
+void csvr_resize(const Arg *arg)
 {
-  rows[st.activeRow - 1].height += y;
-  cols[st.activeCol - 1].width += x;
+  repaint();
+}
 
-  if (!y && !x) {
-    if (csv)
-      if (csv->nlines > st.activeRow && csv->lines[0]->nfields > st.activeCol) {
-        int len =  getstrlength(csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
-        cols[st.activeCol - 1].width = len + 1;
-      }
+void printcolindex(int i, int b, int w)
+{
+  /* TODO: Reformat for more readability */
+  /* Column index is limited to ZZ. 3 digit not possible */
+  if (i > MAX_COLUMN - 1)
+    return;
+
+  if (i / 26) {
+    if ((b + w/2 - 1) >= 0)
+      mvwprintw(headwin, 0, b + w/2 - 1, "%c", 64 + (i / 26));
+  }
+  if ((b + w/2) >= 0)
+    mvwprintw(headwin, 0, b + w/2, "%c", 65 + (i % 26));
+}
+
+void handlesig(int signal)
+{
+  if (csvr_state == Command) {
+    csvr_state = Normal;
+    curs_set(0);
+  }
+}
+
+void headerupdate()
+{
+  int i, j;
+
+  /* TODO: Row height != 1 */
+  for (i = 0; i <= st.lastRow - st.begRow; i++){
+    wmove(headwin, i + 1, 0);
+    for (j = 0; j < st.pad - (1 + get_digit(st.begRow + i)); j++){
+      wprintw(headwin, " ");
+    }
+    wprintw(headwin, "%d|", st.begRow + i);
   }
 
-  if (rows[st.activeRow - 1].height < 1)
-    rows[st.activeRow - 1].height = 1;
+  wmove(headwin, 0, 0);
+  wclrtoeol(headwin);
+  int begin;
+  if (st.pivotx == Left) {
+    begin = st.pad;
+    for (j = st.begCol; j <= st.lastCol; j++) {
+      printcolindex(j - 1, begin, cols[j - 1].width);
+      mvwprintw(headwin, 0, begin + cols[j - 1].width - 1, "|");
+      begin += cols[j - 1].width;
+    }
+  } else if (st.pivotx == Right) {
+    begin = width;
+    for (j = st.lastCol; j >= st.begCol; j--) {
+      begin -= cols[j - 1].width;
+      printcolindex(j - 1, begin, cols[j - 1].width);
+      mvwprintw(headwin, 0, begin + cols[j - 1].width - 1, "|");
+    }
+  }
 
-  if (cols[st.activeCol - 1].width < 3)
-    cols[st.activeCol - 1].width = 2;
+  wmove(headwin, 0, 0);
+  for (j = 0; j < st.pad - 1; j++) {
+    wprintw(headwin, " ");
+  }
+  wprintw(headwin, "|");
 
-  calcdim();
+  wrefresh(headwin);
+}
+
+void keypress(int ch)
+{
+  /* parse in master */
+  for (int i = 0; i < LENGTH(master); i++) {
+    if (ch == master[i].ch) {
+      if (master[i].nextst)
+        csvr_state = master[i].nextst;
+      master[i].func(&(master[i].arg));
+      return;
+    }
+  }
+
+  /* parse in respective array */
+  switch (csvr_state) {
+    case Normal:
+      for (int i = 0; i < LENGTH(normalkey); i++) {
+        if (ch == normalkey[i].ch) {
+          if (normalkey[i].nextst)
+            csvr_state = normalkey[i].nextst;
+          normalkey[i].func(&(normalkey[i].arg));
+        }
+      }
+      break;
+    case Command:
+      int found = 0;
+      for (int i = 0; i < LENGTH(commandkey); i++) {
+        if (ch == commandkey[i].ch) {
+          found = 1;
+          if (commandkey[i].nextst)
+            csvr_state = commandkey[i].nextst;
+          commandkey[i].func(&(commandkey[i].arg));
+          break;
+        }
+      }
+      if (!found)
+        cmdput(ch);
+      break;
+    default:
+  }
+
 }
 
 void movecell(int y, int x)
@@ -408,10 +354,91 @@ void movecell(int y, int x)
   selectcell(1);
 }
 
-void handlesig(int signal)
+void movex(const Arg *arg)
 {
-  if (csvr_state == Command)
-    csvr_state = Normal;
+  movecell(0, arg->i);
+}
+
+void movey(const Arg *arg)
+{
+  movecell(arg->i, 0);
+}
+
+void repaint(void)
+{
+  delwin(cellwin);
+  delwin(headwin);
+  delwin(strlwin);
+  delwin(cmdwin);
+
+  calcdim();
+
+  strlwin = newwin(textboxheight, width, 0, 0);
+  cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
+  headwin = newwin(height - 2, width, textboxheight, 0);
+  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
+      textboxheight + 1, st.pad); /* 1 is the size of header */
+
+	wbkgd(stdscr, COLOR_PAIR(1));
+	wbkgd(stdscr, COLOR_PAIR(2));
+	wbkgd(strlwin, COLOR_PAIR(3));
+	wbkgd(headwin, COLOR_PAIR(4));
+	wbkgd(cmdwin, COLOR_PAIR(3));
+
+  writecells();
+}
+
+void resizecell(int y, int x)
+{
+  rows[st.activeRow - 1].height += y;
+  cols[st.activeCol - 1].width += x;
+
+  if (!y && !x) {
+    if (csv)
+      if (csv->nlines > st.activeRow && csv->lines[0]->nfields > st.activeCol) {
+        int len =  getstrlength(csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
+        cols[st.activeCol - 1].width = len + 1;
+      }
+  }
+
+  if (rows[st.activeRow - 1].height < 1)
+    rows[st.activeRow - 1].height = 1;
+
+  if (cols[st.activeCol - 1].width < 3)
+    cols[st.activeCol - 1].width = 2;
+
+  calcdim();
+}
+
+void resizecellx(const Arg *arg)
+{
+  resizecell(0, arg->i);
+}
+
+void selectcell(int activate)
+{
+  int begin;
+  int j;
+  /* TODO: Row height != 1 */
+  if (st.pivotx == Left) {
+    begin = 0;
+    for (j = st.begCol; j < st.activeCol; j++) {
+      begin += cols[j - 1].width;
+    }
+    mvwchgat(cellwin, st.activeRow - st.begRow, 
+        begin, cols[st.activeCol - 1].width,
+        A_NORMAL, activate + 1, NULL);
+  }
+  else if (st.pivotx == Right) {
+    begin = st.cellwinwidth;
+    for (j = st.lastCol; j >= st.activeCol; j--) {
+      begin -= cols[j - 1].width;
+    }
+    mvwchgat(cellwin, st.activeRow - st.begRow, 
+        begin, cols[st.activeCol - 1].width,
+        A_NORMAL, activate + 1, NULL);
+  }
+  writetextbox();
 }
 
 void setup()
@@ -444,51 +471,7 @@ void setup()
     cols[i].width = CELL_WIDTH;
   }
 
-  calcdim();
-
-  strlwin = newwin(textboxheight, width, 0, 0);
-  cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
-  headwin = newwin(height - 2, width, textboxheight, 0);
-  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
-      textboxheight + 1, st.pad); /* 1 is the size of header */
-
-	wbkgd(stdscr, COLOR_PAIR(1));
-	wbkgd(stdscr, COLOR_PAIR(2));
-	wbkgd(strlwin, COLOR_PAIR(3));
-	wbkgd(headwin, COLOR_PAIR(4));
-	wbkgd(cmdwin, COLOR_PAIR(3));
-
-  writecells();
-
-  refresh();
-  headerupdate();
-  wrefresh(cmdwin);
-  wrefresh(cellwin);
-  wrefresh(strlwin);
-}
-
-void repaint(void)
-{
-  delwin(cellwin);
-  delwin(headwin);
-  delwin(strlwin);
-  delwin(cmdwin);
-
-  calcdim();
-
-  strlwin = newwin(textboxheight, width, 0, 0);
-  cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
-  headwin = newwin(height - 2, width, textboxheight, 0);
-  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
-      textboxheight + 1, st.pad); /* 1 is the size of header */
-
-	wbkgd(stdscr, COLOR_PAIR(1));
-	wbkgd(stdscr, COLOR_PAIR(2));
-	wbkgd(strlwin, COLOR_PAIR(3));
-	wbkgd(headwin, COLOR_PAIR(4));
-	wbkgd(cmdwin, COLOR_PAIR(3));
-
-  writecells();
+  repaint();
 }
 
 void usage(void)
@@ -497,6 +480,55 @@ void usage(void)
   fprintf(stdout, "Options:\n");
   fprintf(stdout, "\t-t\tchoose separator\n");
   fprintf(stdout, "\t-h\tshow this help\n");
+}
+
+void writecells()
+{
+  if (!csv) {
+    selectcell(1);
+    return;
+  }
+
+  werase(cellwin);
+  for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < csv->nlines - st.begRow + 1; i++) {
+    int cellheight = rows[st.begCol + i - 1].height;
+    for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < csv->lines[i]->nfields - st.begCol + 1; j++) {
+      int cellwidth;
+      if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
+        cellwidth = cols[st.begCol + j - 1].width - st.xcov;
+      else
+        cellwidth = cols[st.begCol + j - 1].width;
+      writesinglecell(yt, xt, cellheight, cellwidth,
+          csv->lines[st.begRow + i - 1]->fields[st.begCol + j - 1]);
+      xt += cellwidth;
+    }
+    yt += cellheight;
+  }
+  selectcell(1);
+}
+
+void writesinglecell(int y, int x, int height, int width, char *str)
+{
+  /* TODO: Wrap text when have row height > 1 */
+  /* TODO: Deal with memory alloc */
+  char temp[MAX_STRING_LENGTH];
+  snprintf(temp, width, str);
+  mvwprintw(cellwin, y, x, "%s", temp);
+}
+
+void writetextbox(void)
+{
+  wmove(strlwin, 0, 0); wclrtoeol(strlwin);
+
+  if (!csv)
+    return;
+
+  if (csv->nlines < st.activeRow || csv->lines[0]->nfields < st.activeCol)
+    return;
+
+  for (int i = 0; i < st.pad; i++)
+    wprintw(strlwin, " ");
+  wprintw(strlwin, "%s", csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
 }
 
 int main(int argc, char **argv)
@@ -550,60 +582,17 @@ int main(int argc, char **argv)
   csvr_state = Normal;
 
   while (csvr_state != Quit) {
-    switch (c = getch())
-    {
-      case KEY_RESIZE:
-        repaint();
-        break;
-			case 'h':
-			case KEY_LEFT:
-				movecell(0, -1);
-				break;
-			case 'l':
-			case KEY_RIGHT:
-				movecell(0,  1);
-				break;
-			case 'k':
-			case KEY_UP:
-				movecell(-1,  0);
-				break;
-			case 'j':
-			case KEY_DOWN:
-				movecell(1,  0);
-				break;
-			case 'B':
-				movecell(0,  -5);
-				break;
-			case 'W':
-				movecell(0,  5);
-				break;
-			case '':
-				movecell(-10,  0);
-				break;
-			case '':
-				movecell(10,  0);
-				break;
-      case '+':
-        resizecell(0, 1);
-        break;
-      case '-':
-        resizecell(0, -1);
-        break;
-      case '=':
-        resizecell(0, 0);
-        break;
-      case ':':
-        csvr_state = Command;
-        commandmode();
-        break;
-    }
-
+    /* TODO: Avoid writing cell at every loop */
     writecells();
     refresh();
     headerupdate();
     wrefresh(cmdwin);
     wrefresh(cellwin);
     wrefresh(strlwin);
+
+    c = getch();
+    if (c != ERR)
+      keypress(c);
   }
 
   cleanup();
