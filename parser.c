@@ -2,51 +2,9 @@
 #include <stdlib.h>
 
 #include "parser.h"
+#include "string_st.h"
 
-struct line_t* parse_csv_line_blk(FILE *csv_file, char sep, int blkfields)
-{
-  int n;
-  char ch;
-
-  long set = ftell(csv_file);
-  for (n = 1; (ch = fgetc(csv_file)) != EOF && (ch != '\n'); )
-    if (ch == sep)
-      n++;
-
-  fseek(csv_file, set, SEEK_SET);
-
-  struct line_t *line = calloc(1, sizeof(struct line_t));
-  line->blkfields = blkfields;
-  if (blkfields == 0)
-    line->fields = calloc(n, sizeof(char*));
-  else
-    line->fields = calloc(blkfields, sizeof(char*));
-  line->nfields = n;
-
-  for (int i = 0; i < line->nfields; i++)
-    line->fields[i] = calloc(MAX_STRING_LENGTH, sizeof(char));
-
-  for (int i = 0, j = 0; (ch = fgetc(csv_file)) != EOF && (ch != '\n'); ) {
-    if (ch == sep) {
-      line->fields[i][j] = '\0';
-      j = 0; i++;
-    } else {
-      line->fields[i][j] = ch;
-      j++;
-    }
-  }
-
-  return line;
-}
-
-struct line_t* parse_csv_line(FILE *csv_file, char sep)
-{
-  struct line_t *line = parse_csv_line_blk(csv_file, sep, 0);
-
-  return line;
-}
-
-struct csv_t* parse_csv_blk(FILE *csv_file, char sep, int blklines, int blkfields)
+struct vec_t* parse_csv_v(FILE *csv_file, char sep)
 {
   int n;
   char ch;
@@ -56,47 +14,39 @@ struct csv_t* parse_csv_blk(FILE *csv_file, char sep, int blklines, int blkfield
     if (ch == '\n')
       n++;
 
+  struct vec_t *pv;
+  pv = calloc(1, sizeof(struct vec_t));
+  if (!pv)
+    return NULL;
+  pv->vs = calloc(n, sizeof(VECTOR_ST*));
+  if (!pv->vs) {
+    free(pv);
+    return NULL;
+  }
+
   fseek(csv_file, set, SEEK_SET);
+  for (int i = 0; i < n; i++) {
+    STRING_ST* line = new_empty_str();
 
-  struct csv_t *csv = calloc(1, sizeof(struct csv_t));
-  csv->blklines = blklines;
-  if (blklines == 0)
-    csv->lines = calloc(n, sizeof(struct line_t*));
-  else
-    csv->lines = calloc(blklines, sizeof(struct line_t*));
-  csv->nlines = n;
+    while ((ch = fgetc(csv_file)) != '\n')
+      s_append_c(line, ch);
 
-  for (int i = 0; i < csv->nlines; i++) {
-    csv->lines[i] = parse_csv_line(csv_file, sep);
+    VECTOR_ST *line_v;
+    line_v = parse_delimited_c(line, sep);
+    pv->vs[i] = line_v;
+    pv->n += 1;
+    del_str(line);
   }
 
-  return csv;
+  return pv;
 }
 
-struct csv_t* parse_csv(FILE *csv_file, char sep)
+int destroy_strings(struct vec_t *v)
 {
-  struct csv_t *csv = parse_csv_blk(csv_file, sep, 0, 0);
-
-  return csv;
-}
-
-int destroy_line(struct line_t *line)
-{
-  for (int i = 0; i < line->nfields; i++) {
-    free(line->fields[i]);
+  for (int i = 0; i < v->n; i++) {
+    del_vector(v->vs[i]);
   }
-  free(line->fields);
-  free(line);
+  free(v->vs);
+  free(v);
   return 0;
 }
-
-int destroy_csv(struct csv_t *csv)
-{
-  for (int i = 0; i < csv->nlines; i++) {
-    destroy_line(csv->lines[i]);
-  }
-  free(csv->lines);
-  free(csv);
-  return 0;
-}
-

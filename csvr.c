@@ -8,6 +8,7 @@
 #include <signal.h>
 
 #include "parser.h"
+#include "string_st.h"
 
 /* Macros */
 #define LENGTH(X)         (sizeof X / sizeof X[0])
@@ -73,7 +74,7 @@ static void selectcell(int activate);
 static void setup(void);
 static void usage(void);
 static void writecells(void);
-static void writesinglecell(int y, int x, int height, int width, char *str);
+static void writesinglecell(int y, int x, int height, int width, const char *str, size_t strlen);
 static void writetextbox(void);
 int get_digit(int n);
 int getstrlength(char *s);
@@ -92,8 +93,8 @@ extern int errno;
 static int height, width;
 static int textboxheight;
 static Row rows[MAX_ROW];
-static struct csv_t *csv = NULL;
 static struct sheetparam st;
+static struct vec_t *v = NULL;
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 
 /* Function implementations */
@@ -154,8 +155,8 @@ void cleanup(void)
   delwin(cmdwin);
 	endwin();
 
-  if (csv)
-    destroy_csv(csv);
+  if (v)
+    destroy_strings(v);
 }
 
 void cmddel(const Arg *arg)
@@ -394,9 +395,9 @@ void resizecell(int y, int x)
   cols[st.activeCol - 1].width += x;
 
   if (!y && !x) {
-    if (csv)
-      if (csv->nlines > st.activeRow && csv->lines[0]->nfields > st.activeCol) {
-        int len =  getstrlength(csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
+    if (v)
+      if (v->n > st.activeRow && v_get_len(v->vs[0]) > st.activeCol) {
+        int len = s_get_len(v_get_str(v->vs[st.activeRow - 1], st.activeCol - 1));
         cols[st.activeCol - 1].width = len + 1;
       }
   }
@@ -484,22 +485,33 @@ void usage(void)
 
 void writecells()
 {
-  if (!csv) {
+  const char *str;
+  size_t strlen;
+  if (!v) {
     selectcell(1);
     return;
   }
 
   werase(cellwin);
-  for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < csv->nlines - st.begRow + 1; i++) {
+  for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < v->n - st.begRow + 1; i++) {
     int cellheight = rows[st.begCol + i - 1].height;
-    for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < csv->lines[i]->nfields - st.begCol + 1; j++) {
+    for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < v_get_len(v->vs[i]) - st.begCol + 1; j++) {
       int cellwidth;
       if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
         cellwidth = cols[st.begCol + j - 1].width - st.xcov;
       else
         cellwidth = cols[st.begCol + j - 1].width;
-      writesinglecell(yt, xt, cellheight, cellwidth,
-          csv->lines[st.begRow + i - 1]->fields[st.begCol + j - 1]);
+
+      if (st.begRow + i - 1 < v->n && st.begCol + j - 1 < v_get_len(v->vs[0])) {
+        str = v_get_str_l(v->vs[st.begRow + i - 1], st.begCol + j - 1);
+        strlen = s_get_mlen(v_get_str(v->vs[st.begRow + i - 1], st.begCol + j - 1));
+      }
+      else {
+        str = "";
+        strlen = MAX_STRING_LENGTH;
+      }
+
+      writesinglecell(yt, xt, cellheight, cellwidth, str, strlen);
       xt += cellwidth;
     }
     yt += cellheight;
@@ -507,11 +519,10 @@ void writecells()
   selectcell(1);
 }
 
-void writesinglecell(int y, int x, int height, int width, char *str)
+void writesinglecell(int y, int x, int height, int width, const char *str, size_t strlen)
 {
   /* TODO: Wrap text when have row height > 1 */
-  /* TODO: Deal with memory alloc */
-  char temp[MAX_STRING_LENGTH];
+  char temp[strlen];
   snprintf(temp, width, str);
   mvwprintw(cellwin, y, x, "%s", temp);
 }
@@ -520,15 +531,15 @@ void writetextbox(void)
 {
   wmove(strlwin, 0, 0); wclrtoeol(strlwin);
 
-  if (!csv)
+  if (!v)
     return;
 
-  if (csv->nlines < st.activeRow || csv->lines[0]->nfields < st.activeCol)
+  if (v->n < st.activeRow || v_get_len(v->vs[0]) < st.activeCol)
     return;
 
   for (int i = 0; i < st.pad; i++)
     wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", csv->lines[st.activeRow - 1]->fields[st.activeCol - 1]);
+  wprintw(strlwin, "%s", v_get_str_l(v->vs[st.activeRow - 1], st.activeCol - 1));
 }
 
 int main(int argc, char **argv)
@@ -573,7 +584,8 @@ int main(int argc, char **argv)
       fprintf(stderr, "Error. %s: \'%s\'\n", strerror(errno), *(argv + 1));
       exit(1);
     }
-    csv = parse_csv_blk(csv_file, sep, MAX_ROW, MAX_COLUMN);
+
+    v = parse_csv_v(csv_file, sep);
     fclose(csv_file);
   }
 
