@@ -1,4 +1,6 @@
+test/
 csvr
 csvrDeb
 *.o
 TODO
+tags

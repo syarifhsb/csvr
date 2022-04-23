@@ -22,6 +22,7 @@ enum { NoChange = 0, Normal, NormalCell, Insert, Command, Quit };  /* Program Mo
 struct sheetparam {
   int cellwinheight;
   int cellwinwidth;
+  int cellwinupdate;
   int nrow, ncol;
   int begRow, lastRow;
   int begCol, lastCol;
@@ -323,32 +324,36 @@ void movecell(int y, int x)
     st.activeRow = 1;
     st.begRow = 1;
     st.pivoty = Top;
-  } else if (st.activeRow <= st.begRow) {
+  } else if (st.activeRow <= st.begRow && y != 0) {
     st.begRow = st.activeRow;
     st.pivoty = Top;
+    st.cellwinupdate = 1;
   } else if (st.activeRow > MAX_ROW) {
     st.activeRow = MAX_ROW;
     st.lastRow = MAX_ROW;
     st.pivoty = Bottom;
-  } else if (st.activeRow >= st.lastRow) {
+  } else if (st.activeRow >= st.lastRow && y != 0) {
     st.lastRow = st.activeRow;
     st.pivoty = Bottom;
+    st.cellwinupdate = 1;
   }
 
   if (st.activeCol <= 0) {
     st.activeCol = 1;
     st.lastCol = 1;
     st.pivotx = Left;
-  } else if (st.activeCol <= st.begCol) {
+  } else if (st.activeCol <= st.begCol && x != 0) {
     st.begCol = st.activeCol;
     st.pivotx = Left;
+    st.cellwinupdate = 1;
   } else if (st.activeCol > MAX_COLUMN) {
     st.activeCol = MAX_COLUMN;
     st.lastCol = MAX_COLUMN;
     st.pivotx = Right;
-  } else if (st.activeCol >= st.lastCol) {
+  } else if (st.activeCol >= st.lastCol && x != 0) {
     st.lastCol = st.activeCol;
     st.pivotx = Right;
+    st.cellwinupdate = 1;
   }
 
   calcdim();
@@ -458,6 +463,8 @@ void setup()
   noecho();
   halfdelay(255);
 
+  st.cellwinupdate = 1;
+
   st.nrow = 1; st.ncol = 1;
   st.activeRow = 1; st.activeCol = 1;
 
@@ -487,36 +494,41 @@ void writecells()
 {
   const char *str;
   size_t strlen;
+
   if (!v) {
     selectcell(1);
     return;
   }
 
-  werase(cellwin);
-  for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < v->n - st.begRow + 1; i++) {
-    int cellheight = rows[st.begCol + i - 1].height;
-    for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < v_get_len(v->vs[i]) - st.begCol + 1; j++) {
-      int cellwidth;
-      if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
-        cellwidth = cols[st.begCol + j - 1].width - st.xcov;
-      else
-        cellwidth = cols[st.begCol + j - 1].width;
+  if (st.cellwinupdate) {
+    werase(cellwin);
+    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < v->n - st.begRow + 1; i++) {
+      int cellheight = rows[st.begCol + i - 1].height;
+      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < v_get_len(v->vs[i]) - st.begCol + 1; j++) {
+        int cellwidth;
+        if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
+          cellwidth = cols[st.begCol + j - 1].width - st.xcov;
+        else
+          cellwidth = cols[st.begCol + j - 1].width;
 
-      if (st.begRow + i - 1 < v->n && st.begCol + j - 1 < v_get_len(v->vs[0])) {
-        str = v_get_str_l(v->vs[st.begRow + i - 1], st.begCol + j - 1);
-        strlen = s_get_mlen(v_get_str(v->vs[st.begRow + i - 1], st.begCol + j - 1));
-      }
-      else {
-        str = "";
-        strlen = MAX_STRING_LENGTH;
-      }
+        if (st.begRow + i - 1 < v->n && st.begCol + j - 1 < v_get_len(v->vs[0])) {
+          str = v_get_str_l(v->vs[st.begRow + i - 1], st.begCol + j - 1);
+          strlen = s_get_mlen(v_get_str(v->vs[st.begRow + i - 1], st.begCol + j - 1));
+        }
+        else {
+          str = "";
+          strlen = MAX_STRING_LENGTH;
+        }
 
-      writesinglecell(yt, xt, cellheight, cellwidth, str, strlen);
-      xt += cellwidth;
+        writesinglecell(yt, xt, cellheight, cellwidth, str, strlen);
+        xt += cellwidth;
+      }
+      yt += cellheight;
+
     }
-    yt += cellheight;
-  }
-  selectcell(1);
+    st.cellwinupdate = 0;
+    selectcell(1);
+  } 
 }
 
 void writesinglecell(int y, int x, int height, int width, const char *str, size_t strlen)
@@ -594,7 +606,6 @@ int main(int argc, char **argv)
   csvr_state = Normal;
 
   while (csvr_state != Quit) {
-    /* TODO: Avoid writing cell at every loop */
     writecells();
     refresh();
     headerupdate();
