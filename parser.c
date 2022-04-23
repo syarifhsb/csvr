@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "parser.h"
 #include "string_st.h"
 
-struct vec_t* parse_csv_v(FILE *csv_file, char sep)
+#define MAX_STRING_LENGTH 1024
+
+TABLE_ST* parse_csv(FILE *csv_file, char sep)
 {
   int n;
   char ch;
@@ -14,15 +15,10 @@ struct vec_t* parse_csv_v(FILE *csv_file, char sep)
     if (ch == '\n')
       n++;
 
-  struct vec_t *pv;
-  pv = calloc(1, sizeof(struct vec_t));
-  if (!pv)
+  TABLE_ST *t;
+  t = new_table();
+  if (!t)
     return NULL;
-  pv->vs = calloc(n, sizeof(VECTOR_ST*));
-  if (!pv->vs) {
-    free(pv);
-    return NULL;
-  }
 
   fseek(csv_file, set, SEEK_SET);
   for (int i = 0; i < n; i++) {
@@ -33,20 +29,10 @@ struct vec_t* parse_csv_v(FILE *csv_file, char sep)
 
     VECTOR_ST *line_v;
     line_v = parse_delimited_c(line, sep);
-    pv->vs[i] = line_v;
-    pv->n += 1;
     del_str(line);
+    t = t_append(t, line_v);
   }
 
-  return pv;
+  return t;
 }
 
-int destroy_strings(struct vec_t *v)
-{
-  for (int i = 0; i < v->n; i++) {
-    del_vector(v->vs[i]);
-  }
-  free(v->vs);
-  free(v);
-  return 0;
-}

@@ -7,12 +7,12 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "parser.h"
 #include "string_st.h"
 
 /* Macros */
 #define LENGTH(X)         (sizeof X / sizeof X[0])
 #define CTRL(X)           ((X) & 0x1f)
+#define MAX_STRING_LENGTH 1024
 
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
@@ -81,6 +81,8 @@ int get_digit(int n);
 int getstrlength(char *s);
 int strcicmp(char const *a, char const *b);
 
+TABLE_ST* parse_csv(FILE *csv_file, char sep);
+
 #include "config.h"
 
 /* Variables */
@@ -95,7 +97,7 @@ static int height, width;
 static int textboxheight;
 static Row rows[MAX_ROW];
 static struct sheetparam st;
-static struct vec_t *v = NULL;
+static TABLE_ST *t = NULL;
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 
 /* Function implementations */
@@ -156,8 +158,8 @@ void cleanup(void)
   delwin(cmdwin);
 	endwin();
 
-  if (v)
-    destroy_strings(v);
+  if (t)
+    del_table(t);
 }
 
 void cmddel(const Arg *arg)
@@ -400,9 +402,9 @@ void resizecell(int y, int x)
   cols[st.activeCol - 1].width += x;
 
   if (!y && !x) {
-    if (v)
-      if (v->n > st.activeRow && v_get_len(v->vs[0]) > st.activeCol) {
-        int len = s_get_len(v_get_str(v->vs[st.activeRow - 1], st.activeCol - 1));
+    if (t)
+      if (t_get_len(t) > st.activeRow && v_get_len(t_get_vector(t, 0)) > st.activeCol) {
+        int len = s_get_len(v_get_str(t_get_vector(t, st.activeRow - 1), st.activeCol - 1));
         cols[st.activeCol - 1].width = len + 1;
       }
   }
@@ -495,25 +497,25 @@ void writecells()
   const char *str;
   size_t strlen;
 
-  if (!v) {
+  if (!t) {
     selectcell(1);
     return;
   }
 
   if (st.cellwinupdate) {
     werase(cellwin);
-    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < v->n - st.begRow + 1; i++) {
+    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < t_get_len(t) - st.begRow + 1; i++) {
       int cellheight = rows[st.begCol + i - 1].height;
-      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < v_get_len(v->vs[i]) - st.begCol + 1; j++) {
+      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < v_get_len(t_get_vector(t, i)) - st.begCol + 1; j++) {
         int cellwidth;
         if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
           cellwidth = cols[st.begCol + j - 1].width - st.xcov;
         else
           cellwidth = cols[st.begCol + j - 1].width;
 
-        if (st.begRow + i - 1 < v->n && st.begCol + j - 1 < v_get_len(v->vs[0])) {
-          str = v_get_str_l(v->vs[st.begRow + i - 1], st.begCol + j - 1);
-          strlen = s_get_mlen(v_get_str(v->vs[st.begRow + i - 1], st.begCol + j - 1));
+        if (st.begRow + i - 1 < t_get_len(t) && st.begCol + j - 1 < v_get_len(t_get_vector(t, 0))) {
+          str = v_get_str_l(t_get_vector(t, st.begRow + i - 1), st.begCol + j - 1);
+          strlen = s_get_mlen(v_get_str(t_get_vector(t, st.begRow + i - 1), st.begCol + j - 1));
         }
         else {
           str = "";
@@ -543,15 +545,15 @@ void writetextbox(void)
 {
   wmove(strlwin, 0, 0); wclrtoeol(strlwin);
 
-  if (!v)
+  if (!t)
     return;
 
-  if (v->n < st.activeRow || v_get_len(v->vs[0]) < st.activeCol)
+  if (t_get_len(t) < st.activeRow || v_get_len(t_get_vector(t, 0)) < st.activeCol)
     return;
 
   for (int i = 0; i < st.pad; i++)
     wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", v_get_str_l(v->vs[st.activeRow - 1], st.activeCol - 1));
+  wprintw(strlwin, "%s", v_get_str_l(t_get_vector(t, st.activeRow - 1), st.activeCol - 1));
 }
 
 int main(int argc, char **argv)
@@ -597,7 +599,7 @@ int main(int argc, char **argv)
       exit(1);
     }
 
-    v = parse_csv_v(csv_file, sep);
+    t = parse_csv(csv_file, sep);
     fclose(csv_file);
   }
 
