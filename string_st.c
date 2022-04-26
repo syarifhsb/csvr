@@ -35,10 +35,12 @@ TABLE_ST*  t_append(TABLE_ST *dst, VECTOR_ST *src);
 TABLE_ST*  t_concat(int n, ...);
 TABLE_ST*  t_copy(TABLE_ST *src);
 TABLE_ST*  parse_delimited_f(FILE *s, char d); /* Not Yet implemented */
+TABLE_ST*  transpose(TABLE_ST *t);
 
 int del_table(TABLE_ST *t);
 size_t t_get_len(TABLE_ST *t);
 size_t t_get_mlen(TABLE_ST *t);
+size_t t_get_max_vector_len(TABLE_ST *t);
 const char* t_get_str_l(TABLE_ST *t, size_t i, size_t j);
 STRING_ST* t_get_str(TABLE_ST *t, size_t i, size_t j);
 VECTOR_ST* t_get_vector(TABLE_ST *t, size_t index);
@@ -70,6 +72,10 @@ int del_str(STRING_ST *s);
 size_t s_get_len(STRING_ST *s);
 size_t s_get_mlen(STRING_ST *s);
 const char* s_get_str_l(STRING_ST *s);
+
+static TABLE_ST*  check_table(TABLE_ST* t);
+static VECTOR_ST* check_vector(VECTOR_ST* v); /* Not Yet implemented */
+static STRING_ST* check_string(STRING_ST* s); /* Not Yet implemented */
 /* End of Function declaration */
 
 /* Functions */
@@ -175,11 +181,40 @@ TABLE_ST* t_copy(TABLE_ST *src)
   return dst;
 }
 
+TABLE_ST* transpose(TABLE_ST *src)
+{
+  if (check_table(src) == NULL)
+    return NULL;
+
+  size_t len = src->len;
+  size_t max_length = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    max_length = max_length > src->vs[i]->len ? max_length : src->vs[i]->len;
+  }
+
+  TABLE_ST *dst = new_table(max_length);
+
+  for (size_t i = 0; i < max_length; i++) {
+    t_append(dst, new_vector());
+  }
+
+  for (size_t i = 0; i < len; i++) {
+    for (size_t j = 0; j < max_length && j < src->vs[i]->len; j++) {
+      if (src->vs[i]->strs[j] == NULL)
+        continue;
+      v_append(dst->vs[j], s_copy(src->vs[i]->strs[j]));
+    }
+  }
+
+  del_table(src);
+
+  return dst;
+}
+
 int del_table(TABLE_ST *t)
 {
-  if (!t)
-    return STRING_FAILURE;
-  if (!t->vs)
+  if (check_table(t) == NULL)
     return STRING_FAILURE;
 
   for (int i = 0; i < t->len; i++) {
@@ -208,6 +243,16 @@ size_t t_get_mlen(TABLE_ST *t)
     return STRING_FAILURE;
 
   return t->mlen;
+}
+
+size_t t_get_max_vector_len(TABLE_ST *t)
+{
+  size_t max_length = 0;
+  
+  for (size_t i = 0; i < t->len; i++)
+    max_length = max_length > t->vs[i]->len ? max_length : t->vs[i]->len;
+
+  return max_length;
 }
 
 STRING_ST* t_get_str(TABLE_ST *t, size_t i, size_t j)
@@ -659,3 +704,12 @@ const char* s_get_str_l(STRING_ST *str)
   return str->l;
 }
 
+static TABLE_ST* check_table(TABLE_ST* t)
+{
+  if (!t)
+    return NULL;
+  if (!t->vs)
+    return NULL;
+
+  return t;
+}

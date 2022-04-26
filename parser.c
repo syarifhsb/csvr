@@ -3,8 +3,6 @@
 
 #include "string_st.h"
 
-#define MAX_STRING_LENGTH 1024
-
 TABLE_ST* parse_csv(FILE *csv_file, char sep)
 {
   int n;
@@ -32,6 +30,8 @@ TABLE_ST* parse_csv(FILE *csv_file, char sep)
     del_str(line);
     t = t_append(t, line_v);
   }
+  
+  t = transpose(t);
 
   return t;
 }

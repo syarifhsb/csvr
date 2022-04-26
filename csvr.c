@@ -403,7 +403,7 @@ void resizecell(int y, int x)
 
   if (!y && !x) {
     if (t)
-      if (t_get_len(t) > st.activeRow && v_get_len(t_get_vector(t, 0)) > st.activeCol) {
+      if (t_get_len(t) > st.activeRow && t_get_max_vector_len(t) > st.activeCol) {
         int len = s_get_len(v_get_str(t_get_vector(t, st.activeRow - 1), st.activeCol - 1));
         cols[st.activeCol - 1].width = len + 1;
       }
@@ -504,18 +504,18 @@ void writecells()
 
   if (st.cellwinupdate) {
     werase(cellwin);
-    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < t_get_len(t) - st.begRow + 1; i++) {
+    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < t_get_max_vector_len(t) - st.begRow + 1; i++) {
       int cellheight = rows[st.begCol + i - 1].height;
-      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < v_get_len(t_get_vector(t, i)) - st.begCol + 1; j++) {
+      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < t_get_len(t) - st.begCol + 1; j++) {
         int cellwidth;
         if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
           cellwidth = cols[st.begCol + j - 1].width - st.xcov;
         else
           cellwidth = cols[st.begCol + j - 1].width;
 
-        if (st.begRow + i - 1 < t_get_len(t) && st.begCol + j - 1 < v_get_len(t_get_vector(t, 0))) {
-          str = v_get_str_l(t_get_vector(t, st.begRow + i - 1), st.begCol + j - 1);
-          strlen = s_get_mlen(v_get_str(t_get_vector(t, st.begRow + i - 1), st.begCol + j - 1));
+        if (st.begRow + i - 1 < t_get_max_vector_len(t) && st.begCol + j - 1 < t_get_len(t)) {
+          str = t_get_str_l(t, st.begCol + j - 1, st.begRow + i - 1);
+          strlen = s_get_mlen(t_get_str(t, st.begCol + j - 1, st.begRow + i - 1));
         }
         else {
           str = "";
@@ -548,12 +548,12 @@ void writetextbox(void)
   if (!t)
     return;
 
-  if (t_get_len(t) < st.activeRow || v_get_len(t_get_vector(t, 0)) < st.activeCol)
+  if (t_get_max_vector_len(t) < st.activeRow || t_get_len(t) < st.activeCol)
     return;
 
   for (int i = 0; i < st.pad; i++)
     wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", v_get_str_l(t_get_vector(t, st.activeRow - 1), st.activeCol - 1));
+  wprintw(strlwin, "%s", t_get_str_l(t, st.activeCol - 1, st.activeRow - 1));
 }
 
 int main(int argc, char **argv)

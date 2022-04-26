@@ -11,10 +11,12 @@ TABLE_ST*  t_append(TABLE_ST *dst, VECTOR_ST *src);
 TABLE_ST*  t_concat(int n, ...);
 TABLE_ST*  t_copy(TABLE_ST *src);
 TABLE_ST*  parse_delimited_f(FILE *s, char d); /* Not Yet implemented */
+TABLE_ST*  transpose(TABLE_ST *t);
 
 int del_table(TABLE_ST *t);
 size_t t_get_len(TABLE_ST *t);
 size_t t_get_mlen(TABLE_ST *t);
+size_t t_get_max_vector_len(TABLE_ST *t);
 const char* t_get_str_l(TABLE_ST *t, size_t i, size_t j);
 STRING_ST* t_get_str(TABLE_ST *t, size_t i, size_t j);
 VECTOR_ST* t_get_vector(TABLE_ST *t, size_t index);
