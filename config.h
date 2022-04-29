@@ -10,7 +10,7 @@
 #define CELL_WIDTH    20
 #define CELL_HEIGHT   1
 #define MAX_COLUMN    702  /* Limited to ZZ index */
-#define MAX_ROW       65535 
+#define MAX_ROW       65535
 #define CMD_MAX_CHAR  10
 
 static Key master[] = {
@@ -45,6 +45,7 @@ static Key normalkey[] = {
 static Key visualkey[] = {
   /* ch          NextState  Function  Arg*/
   { 27,          Normal,    v_end,        {0}        },
+  { 'q',         Normal,    v_end,        {0}        },
   { 'h',         Visual,    movex,        {.i = -1}  },
   { 'j',         Visual,    movey,        {.i = +1}  },
   { 'k',         Visual,    movey,        {.i = -1}  },

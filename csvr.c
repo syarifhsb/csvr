@@ -74,6 +74,8 @@ static void repaint(void);
 static void resizecell(int y, int x);
 static void resizecellx(const Arg *arg);
 static void selectcell(int activate);
+static void selectmultiplecell(int activate);
+static void selectsinglecell(int activate);
 static void setup(void);
 static void usage(void);
 static void v_begin(const Arg *arg);
@@ -105,6 +107,14 @@ static TABLE_ST *t = NULL;
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 
 /* Function implementations */
+void debugprint()
+{
+  werase(cmdwin);
+  mvwprintw(cmdwin, 0, 0, "v begin Row: %d, v begin Col: %d, \
+      v last Row: %d, v last Col: %d",
+      st.vbegRow, st.vbegCol, st.vlastRow, st.vlastCol);
+}
+
 void calcdim()
 {
   int h, w;
@@ -368,11 +378,13 @@ void movecell(int y, int x)
 void movex(const Arg *arg)
 {
   movecell(0, arg->i);
+  /* debugprint(); */
 }
 
 void movey(const Arg *arg)
 {
   movecell(arg->i, 0);
+  /* debugprint(); */
 }
 
 void repaint(void)
@@ -430,23 +442,116 @@ void resizecellx(const Arg *arg)
 
 void selectcell(int activate)
 {
+  if (st.vbegRow + st.vbegCol)
+    selectmultiplecell(activate);
+  else
+    selectsinglecell(activate);
+}
+
+void selectmultiplecell(int activate)
+{
+  int begin, end;
+  int selectbegRow, selectbegCol;
+  int selectlastRow, selectlastCol;
+
+  if (st.vbegRow < st.begRow)
+    selectbegRow = st.begRow;
+  else if (st.vbegRow > st.lastRow)
+    selectbegRow = st.lastRow;
+  else
+    selectbegRow = st.vbegRow;
+
+  if (st.vbegCol < st.begCol)
+    selectbegCol = st.begCol;
+  else if (st.vbegCol > st.lastCol)
+    selectbegCol = st.lastCol;
+  else
+    selectbegCol = st.vbegCol;
+
+  if (st.vlastRow > st.lastRow)
+    selectlastRow = st.lastRow;
+  else if (st.vlastRow < st.begRow)
+    selectlastRow = st.begRow;
+  else
+    selectlastRow = st.vlastRow;
+
+  if (st.vlastCol > st.lastCol)
+    selectlastCol = st.lastCol;
+  else if (st.vlastCol < st.begCol)
+    selectlastCol = st.begCol;
+  else
+    selectlastCol = st.vlastCol;
+
+  /* selectsinglecell(activate); */
+
+  int minRow, maxRow;
+  if (selectlastRow < selectbegRow) {
+    minRow = selectlastRow;
+    maxRow = selectbegRow;
+  } else {
+    minRow = selectbegRow;
+    maxRow = selectlastRow;
+  }
+
+  int minCol, maxCol;
+  if (selectlastCol < selectbegCol) {
+    minCol = selectlastCol;
+    maxCol = selectbegCol;
+  } else {
+    minCol = selectbegCol;
+    maxCol = selectlastCol;
+  }
+
+  if (st.pivotx == Left) {
+    for (int i = minRow; i < maxRow + 1; i++) {
+      begin = 0;
+      end = 0;
+      for (int j = st.begCol; j < maxCol + 1; j++) {
+        end += cols[j - 1].width;
+        if (j < minCol)
+          begin += cols[j - 1].width;
+      }
+      mvwchgat(cellwin, i - st.begRow, begin,
+          end - begin, A_NORMAL, activate + 1, NULL);
+    }
+  } else if (st.pivotx == Right) {
+    for (int i = minRow; i < maxRow + 1; i++) {
+      begin = st.cellwinwidth;
+      end = st.cellwinwidth;
+      for (int j = st.lastCol; j >= minCol; j--) {
+        begin -= cols[j - 1].width;
+        if (j > maxCol)
+          end -= cols[j - 1].width;
+      }
+      if (begin < 0)
+        begin = 0;
+      mvwchgat(cellwin, i - st.begRow, begin,
+          end - begin, A_NORMAL, activate + 1, NULL);
+    }
+  }
+}
+
+void selectsinglecell(int activate)
+{
   int begin;
-  int j;
+  /* int j; */
   /* TODO: Row height != 1 */
   if (st.pivotx == Left) {
     begin = 0;
-    for (j = st.begCol; j < st.currentCol; j++) {
+    for (int j = st.begCol; j < st.currentCol; j++) {
       begin += cols[j - 1].width;
     }
-    mvwchgat(cellwin, st.currentRow - st.begRow,
-        begin, cols[st.currentCol - 1].width,
+    mvwchgat(cellwin, st.currentRow - st.begRow, begin,
+        cols[st.currentCol - 1].width,
         A_NORMAL, activate + 1, NULL);
   }
   else if (st.pivotx == Right) {
     begin = st.cellwinwidth;
-    for (j = st.lastCol; j >= st.currentCol; j--) {
+    for (int j = st.lastCol; j >= st.currentCol; j--) {
       begin -= cols[j - 1].width;
     }
+    if (begin < 0)
+      begin = 0;
     mvwchgat(cellwin, st.currentRow - st.begRow,
         begin, cols[st.currentCol - 1].width,
         A_NORMAL, activate + 1, NULL);
@@ -505,8 +610,10 @@ void v_begin(const Arg *arg)
 
 void v_end(const Arg *arg)
 {
+  selectmultiplecell(0);
   st.vbegRow = st.vlastRow = 0;
   st.vbegCol = st.vlastCol = 0;
+  selectcell(1);
 }
 
 void writecells()
