@@ -17,7 +17,7 @@
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
 enum { Left, Right };  /* Pivot X */
-enum { NoChange = 0, Normal, NormalCell, Insert, Command, Quit };  /* Program Mode */
+enum { Normal, NormalCell, Visual, Insert, Command, Quit };  /* Program Mode */
 
 struct sheetparam {
   int cellwinheight;
@@ -26,7 +26,9 @@ struct sheetparam {
   int nrow, ncol;
   int begRow, lastRow;
   int begCol, lastCol;
-  int activeRow, activeCol;
+  int vbegRow, vlastRow;
+  int vbegCol, vlastCol;
+  int currentRow, currentCol;
   int pad; /* Row number Padding: includes number and the bar char: '25|' */
   int pivoty, pivotx;
   int ycov, xcov; /* part of cell that is hidden */
@@ -41,10 +43,10 @@ typedef struct {
 } Row;
 
 typedef union {
-	int i;
-	unsigned int ui;
-	float f;
-	const void *v;
+  int i;
+  unsigned int ui;
+  float f;
+  const void *v;
 } Arg;
 
 typedef struct {
@@ -74,6 +76,8 @@ static void resizecellx(const Arg *arg);
 static void selectcell(int activate);
 static void setup(void);
 static void usage(void);
+static void v_begin(const Arg *arg);
+static void v_end(const Arg *arg);
 static void writecells(void);
 static void writesinglecell(int y, int x, int height, int width, const char *str, size_t strlen);
 static void writetextbox(void);
@@ -130,7 +134,7 @@ void calcdim()
   if (st.pivotx == Right) {
     for (j = st.lastCol, colswidth = 0;
         colswidth < st.cellwinwidth;
-        colswidth += cols[j - 1].width, j--) 
+        colswidth += cols[j - 1].width, j--)
     {
       st.xcov = cols[j - 1].width - (st.cellwinwidth - colswidth);
     }
@@ -142,7 +146,7 @@ void calcdim()
   if (st.pivotx == Left) {
     for (j = st.begCol, colswidth = 0;
         colswidth < st.cellwinwidth;
-        colswidth += cols[j - 1].width, j++) 
+        colswidth += cols[j - 1].width, j++)
     {
       st.xcov = cols[j - 1].width - (st.cellwinwidth - colswidth);
     }
@@ -156,7 +160,7 @@ void cleanup(void)
   delwin(headwin);
   delwin(strlwin);
   delwin(cmdwin);
-	endwin();
+  endwin();
 
   if (t)
     del_table(t);
@@ -176,7 +180,6 @@ void cmddel(const Arg *arg)
 
 void cmddo(const Arg *arg)
 {
-  /* Do Command */
   if (!strcicmp("q", cmdstr))
     csvr_state = Quit;
   curs_set(0);
@@ -206,6 +209,7 @@ void cmdstart(const Arg *arg)
 
 void csvr_resize(const Arg *arg)
 {
+  st.cellwinupdate = 1;
   repaint();
 }
 
@@ -273,9 +277,20 @@ void headerupdate()
   wrefresh(headwin);
 }
 
+void switchkeystate(int ch, int size, Key k[size])
+{
+  for (int i = 0; i < size; i++) {
+    if (ch == k[i].ch) {
+      csvr_state = k[i].nextst;
+      if (k[i].func)
+        k[i].func(&(k[i].arg));
+    }
+  }
+}
+
 void keypress(int ch)
 {
-  /* parse in master */
+  /* Master. supersedes all states */
   for (int i = 0; i < LENGTH(master); i++) {
     if (ch == master[i].ch) {
       if (master[i].nextst)
@@ -285,30 +300,13 @@ void keypress(int ch)
     }
   }
 
-  /* parse in respective array */
+  /* parse in respective key state array */
   switch (csvr_state) {
     case Normal:
-      for (int i = 0; i < LENGTH(normalkey); i++) {
-        if (ch == normalkey[i].ch) {
-          if (normalkey[i].nextst)
-            csvr_state = normalkey[i].nextst;
-          normalkey[i].func(&(normalkey[i].arg));
-        }
-      }
+      switchkeystate(ch, LENGTH(normalkey), normalkey);
       break;
-    case Command:
-      int found = 0;
-      for (int i = 0; i < LENGTH(commandkey); i++) {
-        if (ch == commandkey[i].ch) {
-          found = 1;
-          if (commandkey[i].nextst)
-            csvr_state = commandkey[i].nextst;
-          commandkey[i].func(&(commandkey[i].arg));
-          break;
-        }
-      }
-      if (!found)
-        cmdput(ch);
+    case Visual:
+      switchkeystate(ch, LENGTH(visualkey), visualkey);
       break;
     default:
   }
@@ -319,43 +317,48 @@ void movecell(int y, int x)
 {
   selectcell(0);
 
-  st.activeRow += y;
-  st.activeCol += x;
+  st.currentRow += y;
+  st.currentCol += x;
 
-  if (st.activeRow <= 0) {
-    st.activeRow = 1;
+  if (st.currentRow <= 0) {
+    st.currentRow = 1;
     st.begRow = 1;
     st.pivoty = Top;
-  } else if (st.activeRow <= st.begRow && y != 0) {
-    st.begRow = st.activeRow;
+  } else if (st.currentRow <= st.begRow && y != 0) {
+    st.begRow = st.currentRow;
     st.pivoty = Top;
     st.cellwinupdate = 1;
-  } else if (st.activeRow > MAX_ROW) {
-    st.activeRow = MAX_ROW;
+  } else if (st.currentRow > MAX_ROW) {
+    st.currentRow = MAX_ROW;
     st.lastRow = MAX_ROW;
     st.pivoty = Bottom;
-  } else if (st.activeRow >= st.lastRow && y != 0) {
-    st.lastRow = st.activeRow;
+  } else if (st.currentRow >= st.lastRow && y != 0) {
+    st.lastRow = st.currentRow;
     st.pivoty = Bottom;
     st.cellwinupdate = 1;
   }
 
-  if (st.activeCol <= 0) {
-    st.activeCol = 1;
+  if (st.currentCol <= 0) {
+    st.currentCol = 1;
     st.lastCol = 1;
     st.pivotx = Left;
-  } else if (st.activeCol <= st.begCol && x != 0) {
-    st.begCol = st.activeCol;
+  } else if (st.currentCol <= st.begCol && x != 0) {
+    st.begCol = st.currentCol;
     st.pivotx = Left;
     st.cellwinupdate = 1;
-  } else if (st.activeCol > MAX_COLUMN) {
-    st.activeCol = MAX_COLUMN;
+  } else if (st.currentCol > MAX_COLUMN) {
+    st.currentCol = MAX_COLUMN;
     st.lastCol = MAX_COLUMN;
     st.pivotx = Right;
-  } else if (st.activeCol >= st.lastCol && x != 0) {
-    st.lastCol = st.activeCol;
+  } else if (st.currentCol >= st.lastCol && x != 0) {
+    st.lastCol = st.currentCol;
     st.pivotx = Right;
     st.cellwinupdate = 1;
+  }
+
+  if (csvr_state == Visual) {
+    st.vlastRow = st.currentRow;
+    st.vlastCol = st.currentCol;
   }
 
   calcdim();
@@ -384,38 +387,40 @@ void repaint(void)
   strlwin = newwin(textboxheight, width, 0, 0);
   cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
   headwin = newwin(height - 2, width, textboxheight, 0);
-  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad, 
+  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad,
       textboxheight + 1, st.pad); /* 1 is the size of header */
 
-	wbkgd(stdscr, COLOR_PAIR(1));
-	wbkgd(stdscr, COLOR_PAIR(2));
-	wbkgd(strlwin, COLOR_PAIR(3));
-	wbkgd(headwin, COLOR_PAIR(4));
-	wbkgd(cmdwin, COLOR_PAIR(3));
+  wbkgd(stdscr, COLOR_PAIR(1));
+  wbkgd(stdscr, COLOR_PAIR(2));
+  wbkgd(strlwin, COLOR_PAIR(3));
+  wbkgd(headwin, COLOR_PAIR(4));
+  wbkgd(cmdwin, COLOR_PAIR(3));
 
   writecells();
 }
 
 void resizecell(int y, int x)
 {
-  rows[st.activeRow - 1].height += y;
-  cols[st.activeCol - 1].width += x;
+  rows[st.currentRow - 1].height += y;
+  cols[st.currentCol - 1].width += x;
 
   if (!y && !x) {
     if (t)
-      if (t_get_len(t) > st.activeRow && t_get_max_vector_len(t) > st.activeCol) {
-        int len = s_get_len(v_get_str(t_get_vector(t, st.activeRow - 1), st.activeCol - 1));
-        cols[st.activeCol - 1].width = len + 1;
+      if (t_get_len(t) > st.currentRow && t_get_max_vector_len(t) > st.currentCol) {
+        int len = s_get_len(t_get_str(t, st.currentCol - 1, st.currentRow - 1));
+        cols[st.currentCol - 1].width = len + 1;
       }
   }
 
-  if (rows[st.activeRow - 1].height < 1)
-    rows[st.activeRow - 1].height = 1;
+  if (rows[st.currentRow - 1].height < 1)
+    rows[st.currentRow - 1].height = 1;
 
-  if (cols[st.activeCol - 1].width < 3)
-    cols[st.activeCol - 1].width = 2;
+  if (cols[st.currentCol - 1].width < 3)
+    cols[st.currentCol - 1].width = 2;
 
   calcdim();
+  st.cellwinupdate = 1;
+  writecells();
 }
 
 void resizecellx(const Arg *arg)
@@ -430,20 +435,20 @@ void selectcell(int activate)
   /* TODO: Row height != 1 */
   if (st.pivotx == Left) {
     begin = 0;
-    for (j = st.begCol; j < st.activeCol; j++) {
+    for (j = st.begCol; j < st.currentCol; j++) {
       begin += cols[j - 1].width;
     }
-    mvwchgat(cellwin, st.activeRow - st.begRow, 
-        begin, cols[st.activeCol - 1].width,
+    mvwchgat(cellwin, st.currentRow - st.begRow,
+        begin, cols[st.currentCol - 1].width,
         A_NORMAL, activate + 1, NULL);
   }
   else if (st.pivotx == Right) {
     begin = st.cellwinwidth;
-    for (j = st.lastCol; j >= st.activeCol; j--) {
+    for (j = st.lastCol; j >= st.currentCol; j--) {
       begin -= cols[j - 1].width;
     }
-    mvwchgat(cellwin, st.activeRow - st.begRow, 
-        begin, cols[st.activeCol - 1].width,
+    mvwchgat(cellwin, st.currentRow - st.begRow,
+        begin, cols[st.currentCol - 1].width,
         A_NORMAL, activate + 1, NULL);
   }
   writetextbox();
@@ -455,24 +460,24 @@ void setup()
   initscr();
   textboxheight = 1;
   cmdboxheight = 1;
-	start_color();
-	init_pair(1, FG_COLOR, BG_COLOR);
-	init_pair(2, BG_COLOR, FG_COLOR);
-	init_pair(3, FG_COLOR_STRL, BG_COLOR_STRL);
-	init_pair(4, FG_COLOR_HEAD, BG_COLOR_HEAD);
-	keypad(stdscr, TRUE);
-	curs_set(0);
+  start_color();
+  init_pair(1, FG_COLOR, BG_COLOR);
+  init_pair(2, BG_COLOR, FG_COLOR);
+  init_pair(3, FG_COLOR_STRL, BG_COLOR_STRL);
+  init_pair(4, FG_COLOR_HEAD, BG_COLOR_HEAD);
+  keypad(stdscr, TRUE);
+  curs_set(0);
   noecho();
   halfdelay(255);
 
   st.cellwinupdate = 1;
 
   st.nrow = 1; st.ncol = 1;
-  st.activeRow = 1; st.activeCol = 1;
+  st.currentRow = 1; st.currentCol = 1;
 
   st.pivoty = Top; st.pivotx = Left;
-  st.begRow = 1;
-  st.begCol = 1;
+  st.begRow = 1; st.begCol = 1;
+  st.vbegRow = 0; st.vbegCol = 0;
 
   for (int i = 0; i < LENGTH(rows); i++) {
     rows[i].height = CELL_HEIGHT;
@@ -492,6 +497,18 @@ void usage(void)
   fprintf(stdout, "\t-h\tshow this help\n");
 }
 
+void v_begin(const Arg *arg)
+{
+  st.vbegRow = st.vlastRow = st.currentRow;
+  st.vbegCol = st.vlastCol = st.currentCol;
+}
+
+void v_end(const Arg *arg)
+{
+  st.vbegRow = st.vlastRow = 0;
+  st.vbegCol = st.vlastCol = 0;
+}
+
 void writecells()
 {
   const char *str;
@@ -508,21 +525,26 @@ void writecells()
       int cellheight = rows[st.begCol + i - 1].height;
       for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < t_get_len(t) - st.begCol + 1; j++) {
         int cellwidth;
-        if ((j == st.lastCol - st.begCol && st.pivotx == Left) || (j == 0 && st.pivotx == Right))
+        int startch = 0;
+        if (j == st.lastCol - st.begCol && st.pivotx == Left) {
           cellwidth = cols[st.begCol + j - 1].width - st.xcov;
-        else
+        } else if (j == 0 && st.pivotx == Right) {
+          cellwidth = cols[st.begCol + j - 1].width - st.xcov;
+          startch = st.xcov;
+        } else {
           cellwidth = cols[st.begCol + j - 1].width;
+        }
 
         if (st.begRow + i - 1 < t_get_max_vector_len(t) && st.begCol + j - 1 < t_get_len(t)) {
           str = t_get_str_l(t, st.begCol + j - 1, st.begRow + i - 1);
-          strlen = s_get_mlen(t_get_str(t, st.begCol + j - 1, st.begRow + i - 1));
+          strlen = s_get_len(t_get_str(t, st.begCol + j - 1, st.begRow + i - 1));
         }
         else {
           str = "";
-          strlen = MAX_STRING_LENGTH;
+          strlen = 0;
         }
 
-        writesinglecell(yt, xt, cellheight, cellwidth, str, strlen);
+        writesinglecell(yt, xt, cellheight, cellwidth, str + startch, strlen);
         xt += cellwidth;
       }
       yt += cellheight;
@@ -530,7 +552,7 @@ void writecells()
     }
     st.cellwinupdate = 0;
     selectcell(1);
-  } 
+  }
 }
 
 void writesinglecell(int y, int x, int height, int width, const char *str, size_t strlen)
@@ -538,7 +560,7 @@ void writesinglecell(int y, int x, int height, int width, const char *str, size_
   /* TODO: Wrap text when have row height > 1 */
   char temp[strlen];
   snprintf(temp, width, str);
-  mvwprintw(cellwin, y, x, "%s", temp);
+    mvwprintw(cellwin, y, x, "%s", temp);
 }
 
 void writetextbox(void)
@@ -548,12 +570,12 @@ void writetextbox(void)
   if (!t)
     return;
 
-  if (t_get_max_vector_len(t) < st.activeRow || t_get_len(t) < st.activeCol)
+  if (t_get_max_vector_len(t) < st.currentRow || t_get_len(t) < st.currentCol)
     return;
 
   for (int i = 0; i < st.pad; i++)
     wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", t_get_str_l(t, st.activeCol - 1, st.activeRow - 1));
+  wprintw(strlwin, "%s", t_get_str_l(t, st.currentCol - 1, st.currentRow - 1));
 }
 
 int main(int argc, char **argv)

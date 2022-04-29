@@ -411,7 +411,7 @@ VECTOR_ST* parse_delimited_c(STRING_ST *s, char d)
   int append = 0; /* Whether continue appending last str */
   char c;
   while ((c = *sl++)) {
-    if (c == d || i == DEFAULT_MEMORY_LEN - 1) {
+    if (c == d || i == (DEFAULT_MEMORY_LEN - 1)) {
       if (append)
         s_append_l(v_get_str(v, v_get_len(v) - 1), l);
       else

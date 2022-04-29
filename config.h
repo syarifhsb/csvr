@@ -20,7 +20,7 @@ static Key master[] = {
 
 static Key normalkey[] = {
   /* ch          NextState  Function      Arg*/
-  { ':',         Command,   cmdstart,     {0}        },
+  /* { ':',         Command,   cmdstart,     {0}        }, */
   { '=',         Normal,    resizecellx,  {.i =  0}  },
   { '+',         Normal,    resizecellx,  {.i = +1}  },
   { '-',         Normal,    resizecellx,  {.i = -1}  },
@@ -28,10 +28,27 @@ static Key normalkey[] = {
   { 'j',         Normal,    movey,        {.i = +1}  },
   { 'k',         Normal,    movey,        {.i = -1}  },
   { 'l',         Normal,    movex,        {.i = +1}  },
+  { KEY_LEFT,    Normal,    movex,        {.i = -1}  },
+  { KEY_DOWN,    Normal,    movey,        {.i = +1}  },
+  { KEY_UP,      Normal,    movey,        {.i = -1}  },
+  { KEY_RIGHT,   Normal,    movex,        {.i = +1}  },
   { 'B',         Normal,    movex,        {.i = -5}  },
   { 'W',         Normal,    movex,        {.i = +5}  },
+  { 'Q',         Quit,      NULL,         {0}        },
+  { 'v',         Visual,    v_begin,      {0}        },
   { CTRL('D'),   Normal,    movey,        {.i = +10} },
   { CTRL('U'),   Normal,    movey,        {.i = -10} },
+  { KEY_NPAGE,   Normal,    movey,        {.i = +10} },
+  { KEY_PPAGE,   Normal,    movey,        {.i = -10} },
+};
+
+static Key visualkey[] = {
+  /* ch          NextState  Function  Arg*/
+  { 27,          Normal,    v_end,        {0}        },
+  { 'h',         Visual,    movex,        {.i = -1}  },
+  { 'j',         Visual,    movey,        {.i = +1}  },
+  { 'k',         Visual,    movey,        {.i = -1}  },
+  { 'l',         Visual,    movex,        {.i = +1}  },
 };
 
 static Key commandkey[] = {
