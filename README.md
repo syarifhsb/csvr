@@ -3,12 +3,12 @@ A simple CLI CSV Reader.
 
 ![Demo CSVR](resources/demo_csvr.gif)
 
-The current suppported feature is to view the files with arrow keys, vim 'hjkl' navigation style, PgUp/PgDown, and vim Ctrl-D/Ctrl-U style.
+The current suppported feature is to view the files with arrow keys, vim 'hjkl' navigation style, PgUp/PgDown, and vim Ctrl-D/Ctrl-U style, cell resizing.
 
 ## Compilation
 To compile on Linux, simply compile with make command.
 ```Shell
-./make
+make
 ```
 
 ## Usage
@@ -16,3 +16,4 @@ On the same directory as you compile it, simply execute the command by specifyin
 ```Shell
 ./csvr -t ',' <csv file>
 ```
+
