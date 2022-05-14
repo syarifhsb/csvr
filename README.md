@@ -3,7 +3,7 @@ A simple CLI CSV Reader.
 
 ![Demo CSVR](resources/demo_csvr.gif)
 
-The current suppported feature is to view the files with arrow keys, vim 'hjkl' navigation style, PgUp/PgDown, and vim Ctrl-D/Ctrl-U style, cell resizing.
+The current suppported feature is to view the files with arrow keys, vim 'hjkl' navigation style, PgUp/PgDown, vim Ctrl-D/Ctrl-U page navigation style, and cell resizing.
 
 ## Compilation
 To compile on Linux, simply compile with make command.
