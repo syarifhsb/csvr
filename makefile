@@ -1,14 +1,11 @@
 CC       = gcc --std=gnu99
-SRC      = csvr.c parser.c utils.c string_st.c
+SRC      = csvr.c utils.c data.c
 OBJ      = ${SRC:.c=.o}
 OBJDEBUG = ${SRC:.c=debug.o}
 LIBS     = -lncurses
 CFLAGS   = -Wall 
 CDFLAGS  = -Wall -g 
 LDFLAGS = ${LIBS}
-
-STRINGSTDIR = ../string_st
-STRINGSTSRC = ${STRINGSTDIR}/string_st.c ${STRINGSTDIR}/string_st.h
 
 all: csvr
 

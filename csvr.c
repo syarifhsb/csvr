@@ -21,7 +21,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "string_st.h"
+#include "data.h"
 
 /* Macros */
 #define LENGTH(X)         (sizeof X / sizeof X[0])
@@ -101,13 +101,11 @@ int get_digit(int n);
 int getstrlength(char *s);
 int strcicmp(char const *a, char const *b);
 
-TABLE_ST* parse_csv(FILE *csv_file, char sep);
-
 #include "config.h"
 
 /* Variables */
 static char cmdstr[CMD_MAX_CHAR];
-static char sep = '\0';
+static char *sep = "";
 static Column cols[MAX_COLUMN];
 static int cmdboxheight;
 static int cmdstrlen = 0;
@@ -117,7 +115,8 @@ static int height, width;
 static int textboxheight;
 static Row rows[MAX_ROW];
 static struct sheetparam st;
-static TABLE_ST *t = NULL;
+/* static TABLE_ST *t = NULL; */
+static Data t;
 static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 
 /* Function implementations */
@@ -186,8 +185,7 @@ void cleanup(void)
   delwin(cmdwin);
   endwin();
 
-  if (t)
-    del_table(t);
+  del_data(t);
 }
 
 void cmddel(const Arg *arg)
@@ -431,9 +429,10 @@ void resizecell(int y, int x)
   cols[st.currentCol - 1].width += x;
 
   if (!y && !x) {
-    if (t)
-      if (t_get_len(t) > st.currentRow && t_get_max_vector_len(t) > st.currentCol) {
-        int len = s_get_len(t_get_str(t, st.currentCol - 1, st.currentRow - 1));
+    if (text_is_not_empty(t))
+      if (get_row(t) > st.currentRow && get_col(t) > st.currentCol) {
+        size_t len = get_str_length(t, st.currentRow, st.currentRow);
+        /* int len = s_get_len(t_get_str(t, st.currentCol - 1, st.currentRow - 1)); */
         cols[st.currentCol - 1].width = len + 1;
       }
   }
@@ -635,16 +634,16 @@ void writecells()
   const char *str;
   size_t strlen;
 
-  if (!t) {
+  if (text_is_not_empty(t) == 0) {
     selectcell(1);
     return;
   }
 
   if (st.cellwinupdate) {
     werase(cellwin);
-    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < t_get_max_vector_len(t) - st.begRow + 1; i++) {
+    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < get_row(t) - st.begRow + 1; i++) {
       int cellheight = rows[st.begCol + i - 1].height;
-      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < t_get_len(t) - st.begCol + 1; j++) {
+      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < get_col(t) - st.begCol + 1; j++) {
         int cellwidth;
         int startch = 0;
         if (j == st.lastCol - st.begCol && st.pivotx == Left) {
@@ -656,9 +655,11 @@ void writecells()
           cellwidth = cols[st.begCol + j - 1].width;
         }
 
-        if (st.begRow + i - 1 < t_get_max_vector_len(t) && st.begCol + j - 1 < t_get_len(t)) {
-          str = t_get_str_l(t, st.begCol + j - 1, st.begRow + i - 1);
-          strlen = s_get_len(t_get_str(t, st.begCol + j - 1, st.begRow + i - 1));
+        if (st.begRow + i <= get_row(t) && st.begCol + j <= get_col(t)) {
+          /* str = t_get_str_l(t, st.begCol + j - 1, st.begRow + i - 1); */
+          str = get_str(t, st.begRow + i, st.begCol + j);
+          /* strlen = s_get_len(t_get_str(t, st.begCol + j - 1, st.begRow + i - 1)); */
+          strlen = get_str_length(t, st.begRow + i, st.begCol + j);
         }
         else {
           str = "";
@@ -688,15 +689,15 @@ void writetextbox(void)
 {
   wmove(strlwin, 0, 0); wclrtoeol(strlwin);
 
-  if (!t)
+  if (text_is_not_empty(t) == 0)
     return;
 
-  if (t_get_max_vector_len(t) < st.currentRow || t_get_len(t) < st.currentCol)
+  if (get_row(t) < st.currentRow || get_col(t) < st.currentCol)
     return;
 
   for (int i = 0; i < st.pad; i++)
     wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", t_get_str_l(t, st.currentCol - 1, st.currentRow - 1));
+  wprintw(strlwin, "%s", get_str(t, st.currentRow, st.currentCol));
 }
 
 int main(int argc, char **argv)
@@ -708,11 +709,7 @@ int main(int argc, char **argv)
   while ((chopt = getopt(argc, argv, "t:")) != -1)
     switch (chopt) {
       case 't':
-        if (optarg[1] != '\0') {
-          fprintf(stderr, "Multi-character separator currently not supported\n");
-          exit(1);
-        }
-        sep = optarg[0];
+        sep = optarg;
         break;
       case '?':
         if (optopt == 't')
