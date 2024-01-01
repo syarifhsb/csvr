@@ -84,8 +84,6 @@ get_str(Data d, int row, int col)
 ssize_t
 get_str_length(Data d, int row, int col)
 {
-  ssize_t len;
-
   if (d.texts == NULL)
     return -1;
 

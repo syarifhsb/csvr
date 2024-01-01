@@ -346,6 +346,7 @@ void movecell(int y, int x)
     st.currentRow = 1;
     st.begRow = 1;
     st.pivoty = Top;
+    st.cellwinupdate = 1;
   } else if (st.currentRow <= st.begRow && y != 0) {
     st.begRow = st.currentRow;
     st.pivoty = Top;
@@ -354,6 +355,7 @@ void movecell(int y, int x)
     st.currentRow = MAX_ROW;
     st.lastRow = MAX_ROW;
     st.pivoty = Bottom;
+    st.cellwinupdate = 1;
   } else if (st.currentRow >= st.lastRow && y != 0) {
     st.lastRow = st.currentRow;
     st.pivoty = Bottom;
@@ -364,6 +366,7 @@ void movecell(int y, int x)
     st.currentCol = 1;
     st.lastCol = 1;
     st.pivotx = Left;
+    st.cellwinupdate = 1;
   } else if (st.currentCol <= st.begCol && x != 0) {
     st.begCol = st.currentCol;
     st.pivotx = Left;
@@ -372,6 +375,7 @@ void movecell(int y, int x)
     st.currentCol = MAX_COLUMN;
     st.lastCol = MAX_COLUMN;
     st.pivotx = Right;
+    st.cellwinupdate = 1;
   } else if (st.currentCol >= st.lastCol && x != 0) {
     st.lastCol = st.currentCol;
     st.pivotx = Right;
