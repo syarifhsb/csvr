@@ -18,12 +18,12 @@
 
 #include "data.h"
 
+size_t getstrlength(const char *s);
+
 static size_t
 get_buffer_length(const char *buf)
 {
-  size_t len = 0;
-  while (*buf++ != '\0')
-    len++;
+  size_t len = getstrlength(buf);
 
   if (len > MAX_CHAR)
     return MAX_CHAR;

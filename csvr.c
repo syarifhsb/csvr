@@ -25,8 +25,6 @@
 
 /* Macros */
 #define LENGTH(X)         (sizeof X / sizeof X[0])
-#define CTRL(X)           ((X) & 0x1f)
-#define MAX_STRING_LENGTH 1024
 
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
@@ -87,6 +85,7 @@ static void movey(const Arg *arg);
 static void repaint(void);
 static void resizecell(int y, int x);
 static void resizecellx(const Arg *arg);
+static void resizecelly(const Arg *arg);
 static void selectcell(int activate);
 static void selectmultiplecell(int activate);
 static void selectsinglecell(int activate);
@@ -123,9 +122,9 @@ static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 void debugprint()
 {
   werase(cmdwin);
-  mvwprintw(cmdwin, 0, 0, "v begin Row: %d, v begin Col: %d, \
-      v last Row: %d, v last Col: %d",
-      st.vbegRow, st.vbegCol, st.vlastRow, st.vlastCol);
+  mvwprintw(cmdwin, 0, 0, "%d", st.pad);
+  wrefresh(cmdwin);
+  /* refresh(); */
 }
 
 void calcdim()
@@ -136,22 +135,22 @@ void calcdim()
 
   st.cellwinheight = height - textboxheight - cmdboxheight;
   if (st.pivoty == Top) {
-    st.lastRow = (st.cellwinheight - 1) + (st.begRow - 1);
+    st.lastRow = st.begRow + st.cellwinheight - 2;
   } else if (st.pivoty == Bottom) {
-    st.begRow = (st.lastRow + 1) - (st.cellwinheight - 1);
+    st.begRow = st.lastRow - st.cellwinheight + 2;
   }
 
-  if (cellwin && st.pad - (get_digit(st.lastRow) + 1)) {
-    st.pad = get_digit(st.lastRow) + 1;
-    int widthtemp = width - st.pad;
-    if (st.cellwinwidth - widthtemp) {
+  int new_pad = get_digit(st.lastRow) + 1;
+  if (cellwin && st.pad - new_pad) {
+    st.pad = new_pad;
+    int new_width = width - st.pad;
+    if (st.cellwinwidth - new_width) {
       repaint();
-      st.cellwinwidth = widthtemp;
     }
   } else {
-    st.pad = get_digit(st.lastRow) + 1;
-    st.cellwinwidth = width - st.pad;
+    st.pad = new_pad;
   }
+  st.cellwinwidth = width - st.pad;
 
   int j, colswidth;
   if (st.pivotx == Right) {
@@ -455,6 +454,11 @@ void resizecell(int y, int x)
 void resizecellx(const Arg *arg)
 {
   resizecell(0, arg->i);
+}
+
+void resizecelly(const Arg *arg)
+{
+  resizecell(arg->i, 0);
 }
 
 void selectcell(int activate)

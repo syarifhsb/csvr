@@ -13,6 +13,7 @@
  */
 
 #include <ctype.h>
+#include <stddef.h>
 
 int get_digit(int n)
 {
@@ -36,9 +37,9 @@ int strcicmp(char const *a, char const *b)
   }
 }
 
-int getstrlength(char *s)
+size_t getstrlength(const char *s)
 {
-  int count = 0;
+  size_t count = 0;
 
   while (s[count] != '\0')
     count++;

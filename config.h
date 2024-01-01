@@ -26,6 +26,7 @@
 #define MAX_COLUMN    702  /* Limited to ZZ index */
 #define MAX_ROW       65535
 #define CMD_MAX_CHAR  10
+#define CTRL(X)           ((X) & 0x1f)
 
 static Key master[] = {
   /* ch          NextState  Function      Arg*/
@@ -38,6 +39,8 @@ static Key normalkey[] = {
   { '=',         Normal,    resizecellx,  {.i =  0}  },
   { '+',         Normal,    resizecellx,  {.i = +1}  },
   { '-',         Normal,    resizecellx,  {.i = -1}  },
+  { '[',         Normal,    resizecelly,  {.i = -1}  },
+  { ']',         Normal,    resizecelly,  {.i = +1}  },
   { 'h',         Normal,    movex,        {.i = -1}  },
   { 'j',         Normal,    movey,        {.i = +1}  },
   { 'k',         Normal,    movey,        {.i = -1}  },
