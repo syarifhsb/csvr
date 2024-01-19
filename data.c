@@ -138,7 +138,6 @@ parse_csv(FILE *csv_file, const char *delim)
 
   get_max_row_col(csv_file, delim_newline, &max_row, &max_col);
 
-  /* Data *d = malloc(sizeof(Data)); */
   Data d;
   d.nrow = max_row;
   d.ncol = max_col;

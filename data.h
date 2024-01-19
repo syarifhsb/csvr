@@ -12,8 +12,8 @@
  * If not, see <https://www.gnu.org/licenses/>. 
  */
 
-#ifndef DATA_H
-#define DATA_H
+#ifndef CSVR_DATA_H
+#define CSVR_DATA_H
 
 #define MAX_CHAR 1024
 #define ROW_ALLOC 256
@@ -36,4 +36,4 @@ ssize_t get_str_length(Data d, int row, int col);
 char * get_str(Data d, int row, int col);
 int text_is_not_empty(Data d);
 
-#endif /* DATA_H */
+#endif /* CSVR_DATA_H */

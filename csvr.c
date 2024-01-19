@@ -22,6 +22,7 @@
 #include <signal.h>
 
 #include "data.h"
+#include "ui.h"
 
 /* Macros */
 #define LENGTH(X)         (sizeof X / sizeof X[0])
@@ -70,7 +71,7 @@ typedef struct {
 
 /* Functions declarations */
 static void calcdim(void);
-static void cleanup(void);
+static void cleanup(Data d);
 static void cmddel(const Arg *arg);
 static void cmddo(const Arg *arg);
 static void cmdput(int ch);
@@ -105,18 +106,18 @@ int strcicmp(char const *a, char const *b);
 /* Variables */
 static char cmdstr[CMD_MAX_CHAR];
 static char *sep = "";
-static Column cols[MAX_COLUMN];
+Column cols[MAX_COLUMN];
 static int cmdboxheight;
 static int cmdstrlen = 0;
 static int csvr_state;
 extern int errno;
-static int height, width;
+int height, width;
 static int textboxheight;
-static Row rows[MAX_ROW];
-static struct sheetparam st;
+Row rows[MAX_ROW];
+struct sheetparam st;
 /* static TABLE_ST *t = NULL; */
-static Data t;
-static WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
+static Data d;
+extern WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 
 /* Function implementations */
 void debugprint()
@@ -176,7 +177,7 @@ void calcdim()
   }
 }
 
-void cleanup(void)
+void cleanup(Data d)
 {
   delwin(cellwin);
   delwin(headwin);
@@ -184,7 +185,7 @@ void cleanup(void)
   delwin(cmdwin);
   endwin();
 
-  del_data(t);
+  del_data(d);
 }
 
 void cmddel(const Arg *arg)
@@ -242,11 +243,11 @@ void printcolindex(int i, int b, int w)
     return;
 
   if (i / 26) {
-    if ((b + w/2 - 1) >= 0)
-      mvwprintw(headwin, 0, b + w/2 - 1, "%c", 64 + (i / 26));
+    if ((b + w/2 - 2) >= 0)
+      mvwprintw(headwin, 0, b + w/2 - 2, "%c", 64 + (i / 26));
   }
-  if ((b + w/2) >= 0)
-    mvwprintw(headwin, 0, b + w/2, "%c", 65 + (i % 26));
+  if ((b + w/2 - 1) >= 0)
+    mvwprintw(headwin, 0, b + w/2 - 1, "%c", 65 + (i % 26));
 }
 
 void handlesig(int signal)
@@ -432,10 +433,9 @@ void resizecell(int y, int x)
   cols[st.currentCol - 1].width += x;
 
   if (!y && !x) {
-    if (text_is_not_empty(t))
-      if (get_row(t) > st.currentRow && get_col(t) > st.currentCol) {
-        size_t len = get_str_length(t, st.currentRow, st.currentRow);
-        /* int len = s_get_len(t_get_str(t, st.currentCol - 1, st.currentRow - 1)); */
+    if (text_is_not_empty(d))
+      if (get_row(d) > st.currentRow && get_col(d) > st.currentCol) {
+        size_t len = get_str_length(d, st.currentRow, st.currentCol);
         cols[st.currentCol - 1].width = len + 1;
       }
   }
@@ -642,16 +642,16 @@ void writecells()
   const char *str;
   size_t strlen;
 
-  if (text_is_not_empty(t) == 0) {
+  if (text_is_not_empty(d) == 0) {
     selectcell(1);
     return;
   }
 
   if (st.cellwinupdate) {
     werase(cellwin);
-    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < get_row(t) - st.begRow + 1; i++) {
+    for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < get_row(d) - st.begRow + 1; i++) {
       int cellheight = rows[st.begCol + i - 1].height;
-      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < get_col(t) - st.begCol + 1; j++) {
+      for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < get_col(d) - st.begCol + 1; j++) {
         int cellwidth;
         int startch = 0;
         if (j == st.lastCol - st.begCol && st.pivotx == Left) {
@@ -663,11 +663,11 @@ void writecells()
           cellwidth = cols[st.begCol + j - 1].width;
         }
 
-        if (st.begRow + i <= get_row(t) && st.begCol + j <= get_col(t)) {
-          /* str = t_get_str_l(t, st.begCol + j - 1, st.begRow + i - 1); */
-          str = get_str(t, st.begRow + i, st.begCol + j);
-          /* strlen = s_get_len(t_get_str(t, st.begCol + j - 1, st.begRow + i - 1)); */
-          strlen = get_str_length(t, st.begRow + i, st.begCol + j);
+        if (st.begRow + i <= get_row(d) && st.begCol + j <= get_col(d)) {
+          /* str = t_get_str_l(d, st.begCol + j - 1, st.begRow + i - 1); */
+          str = get_str(d, st.begRow + i, st.begCol + j);
+          /* strlen = s_get_len(t_get_str(d, st.begCol + j - 1, st.begRow + i - 1)); */
+          strlen = get_str_length(d, st.begRow + i, st.begCol + j);
         }
         else {
           str = "";
@@ -697,15 +697,15 @@ void writetextbox(void)
 {
   wmove(strlwin, 0, 0); wclrtoeol(strlwin);
 
-  if (text_is_not_empty(t) == 0)
+  if (text_is_not_empty(d) == 0)
     return;
 
-  if (get_row(t) < st.currentRow || get_col(t) < st.currentCol)
+  if (get_row(d) < st.currentRow || get_col(d) < st.currentCol)
     return;
 
   for (int i = 0; i < st.pad; i++)
     wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", get_str(t, st.currentRow, st.currentCol));
+  wprintw(strlwin, "%s", get_str(d, st.currentRow, st.currentCol));
 }
 
 int main(int argc, char **argv)
@@ -747,7 +747,7 @@ int main(int argc, char **argv)
       exit(1);
     }
 
-    t = parse_csv(csv_file, sep);
+    d = parse_csv(csv_file, sep);
     fclose(csv_file);
   }
 
@@ -768,6 +768,6 @@ int main(int argc, char **argv)
       keypress(c);
   }
 
-  cleanup();
+  cleanup(d);
   return 0;
 }
