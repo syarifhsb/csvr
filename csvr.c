@@ -22,7 +22,6 @@
 #include <signal.h>
 
 #include "data.h"
-#include "ui.h"
 
 /* Macros */
 #define LENGTH(X)         (sizeof X / sizeof X[0])
@@ -117,7 +116,7 @@ Row rows[MAX_ROW];
 struct sheetparam st;
 /* static TABLE_ST *t = NULL; */
 static Data d;
-extern WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
+WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
 
 /* Function implementations */
 void debugprint()

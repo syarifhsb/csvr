@@ -1,5 +1,5 @@
 CC       = gcc --std=gnu99
-SRC      = csvr.c utils.c data.c ui.c
+SRC      = csvr.c utils.c data.c
 OBJ      = ${SRC:.c=.o}
 OBJDEBUG = ${SRC:.c=debug.o}
 LIBS     = -lncurses
