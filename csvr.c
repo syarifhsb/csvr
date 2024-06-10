@@ -1,15 +1,15 @@
 /* This file is part of csvr.
  *
- * csvr is free software: you can redistribute it and/or modify it under the terms of the 
- * GNU General Public License as published by the Free Software Foundation, either version 
+ * csvr is free software: you can redistribute it and/or modify it under the terms of the
+ * GNU General Public License as published by the Free Software Foundation, either version
  * 2 of the License, or (at your option) any later version.
  *
- * csvr is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; 
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+ * csvr is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with csvr. 
- * If not, see <https://www.gnu.org/licenses/>. 
+ * You should have received a copy of the GNU General Public License along with csvr.
+ * If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <ncurses.h>
@@ -71,10 +71,6 @@ typedef struct {
 /* Functions declarations */
 static void calcdim(void);
 static void cleanup(Data d);
-static void cmddel(const Arg *arg);
-static void cmddo(const Arg *arg);
-static void cmdput(int ch);
-static void cmdstart(const Arg *arg);
 static void csvr_resize(const Arg *arg);
 static void handlesig(int signal);
 static void headerupdate(void);
@@ -103,11 +99,9 @@ int strcicmp(char const *a, char const *b);
 #include "config.h"
 
 /* Variables */
-static char cmdstr[CMD_MAX_CHAR];
 static char *sep = "";
 Column cols[MAX_COLUMN];
-static int cmdboxheight;
-static int cmdstrlen = 0;
+static int dbgboxheight;
 static int csvr_state;
 extern int errno;
 int height, width;
@@ -116,16 +110,21 @@ Row rows[MAX_ROW];
 struct sheetparam st;
 /* static TABLE_ST *t = NULL; */
 static Data d;
-WINDOW *headwin, *cellwin, *strlwin, *cmdwin;
+WINDOW *headwin, *cellwin, *strlwin;
+#ifdef CSVR_DEBUG
+WINDOW *dbgwin;
+#endif /* CSVR_DEBUG */
 
 /* Function implementations */
+#ifdef CSVR_DEBUG
 void debugprint()
 {
-  werase(cmdwin);
-  mvwprintw(cmdwin, 0, 0, "%d", st.pad);
-  wrefresh(cmdwin);
-  /* refresh(); */
+  werase(dbgwin);
+  mvwprintw(dbgwin, 0, 0, "%d", st.pad);
+  wrefresh(dbgwin);
+  refresh();
 }
+#endif /* CSVR_DEBUG */
 
 void calcdim()
 {
@@ -133,7 +132,7 @@ void calcdim()
   getmaxyx(stdscr, h, w);
   height = h; width = w;
 
-  st.cellwinheight = height - textboxheight - cmdboxheight;
+  st.cellwinheight = height - textboxheight - dbgboxheight;
   if (st.pivoty == Top) {
     st.lastRow = st.begRow + st.cellwinheight - 2;
   } else if (st.pivoty == Bottom) {
@@ -181,51 +180,12 @@ void cleanup(Data d)
   delwin(cellwin);
   delwin(headwin);
   delwin(strlwin);
-  delwin(cmdwin);
+#ifdef CSVR_DEBUG
+  delwin(dbgwin);
+#endif /* CSVR_DEBUG */
   endwin();
 
   del_data(d);
-}
-
-void cmddel(const Arg *arg)
-{
-  if (cmdstrlen <= 0) {
-    cmdstrlen = 0;
-    cmdstr[0] = '\0';
-  } else {
-    cmdstrlen--;
-    mvwprintw(cmdwin, 0, cmdstrlen + 1, " ");
-    wmove(cmdwin, 0, cmdstrlen + 1);
-  }
-}
-
-void cmddo(const Arg *arg)
-{
-  if (!strcicmp("q", cmdstr))
-    csvr_state = Quit;
-  curs_set(0);
-}
-
-void cmdput(int ch)
-{
-  if (cmdstrlen >= CMD_MAX_CHAR - 1) {
-    cmdstrlen = CMD_MAX_CHAR - 1;
-    cmdstr[CMD_MAX_CHAR - 1] = '\0';
-  } else {
-    cmdstrlen++;
-    waddch(cmdwin, ch);
-    cmdstr[cmdstrlen - 1] = ch;
-    cmdstr[cmdstrlen] = '\0';
-  }
-}
-
-void cmdstart(const Arg *arg)
-{
-  werase(cmdwin);
-  curs_set(1);
-  mvwprintw(cmdwin, 0, 0, ":");
-  cmdstr[0] = '\0';
-  cmdstrlen = 0;
 }
 
 void csvr_resize(const Arg *arg)
@@ -393,13 +353,11 @@ void movecell(int y, int x)
 void movex(const Arg *arg)
 {
   movecell(0, arg->i);
-  /* debugprint(); */
 }
 
 void movey(const Arg *arg)
 {
   movecell(arg->i, 0);
-  /* debugprint(); */
 }
 
 void repaint(void)
@@ -407,21 +365,27 @@ void repaint(void)
   delwin(cellwin);
   delwin(headwin);
   delwin(strlwin);
-  delwin(cmdwin);
+#ifdef CSVR_DEBUG
+  delwin(dbgwin);
+#endif /* CSVR_DEBUG */
 
   calcdim();
 
   strlwin = newwin(textboxheight, width, 0, 0);
-  cmdwin  = newwin(cmdboxheight, width, height - 1, 0);
-  headwin = newwin(height - 2, width, textboxheight, 0);
-  cellwin = newwin(height - (textboxheight + cmdboxheight + 1), width - st.pad,
+#ifdef CSVR_DEBUG
+  dbgwin  = newwin(dbgboxheight, width, height - 1, 0);
+#endif /* CSVR_DEBUG */
+  headwin = newwin(height - (textboxheight + dbgboxheight), width, textboxheight, 0);
+  cellwin = newwin(height - (textboxheight + dbgboxheight + 1), width - st.pad,
       textboxheight + 1, st.pad); /* 1 is the size of header */
 
-  wbkgd(stdscr, COLOR_PAIR(1));
-  wbkgd(stdscr, COLOR_PAIR(2));
+  wbkgd(stdscr,  COLOR_PAIR(1));
+  wbkgd(stdscr,  COLOR_PAIR(2));
   wbkgd(strlwin, COLOR_PAIR(3));
   wbkgd(headwin, COLOR_PAIR(4));
-  wbkgd(cmdwin, COLOR_PAIR(3));
+#ifdef CSVR_DEBUG
+  wbkgd(dbgwin, COLOR_PAIR(3));
+#endif /* CSVR_DEBUG */
 
   writecells();
 }
@@ -584,7 +548,11 @@ void setup()
   signal(SIGINT, handlesig);
   initscr();
   textboxheight = 1;
-  cmdboxheight = 1;
+#ifdef CSVR_DEBUG
+  dbgboxheight = 1;
+#else
+  dbgboxheight = 0;
+#endif /* CSVR_DEBUG */
   start_color();
   init_pair(1, FG_COLOR, BG_COLOR);
   init_pair(2, BG_COLOR, FG_COLOR);
@@ -663,9 +631,7 @@ void writecells()
         }
 
         if (st.begRow + i <= get_row(d) && st.begCol + j <= get_col(d)) {
-          /* str = t_get_str_l(d, st.begCol + j - 1, st.begRow + i - 1); */
           str = get_str(d, st.begRow + i, st.begCol + j);
-          /* strlen = s_get_len(t_get_str(d, st.begCol + j - 1, st.begRow + i - 1)); */
           strlen = get_str_length(d, st.begRow + i, st.begCol + j);
         }
         else {
@@ -758,7 +724,9 @@ int main(int argc, char **argv)
     writecells();
     refresh();
     headerupdate();
-    wrefresh(cmdwin);
+#ifdef CSVR_DEBUG
+    wrefresh(dbgwin);
+#endif /* CSVR_DEBUG */
     wrefresh(cellwin);
     wrefresh(strlwin);
 

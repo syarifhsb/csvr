@@ -4,8 +4,8 @@ OBJ      = ${SRC:.c=.o}
 OBJDEBUG = ${SRC:.c=debug.o}
 LIBS     = -lncurses
 CFLAGS   = -Wall 
-CDFLAGS  = -Wall -g 
-LDFLAGS = ${LIBS}
+CDFLAGS  = -Wall -g -DCSVR_DEBUG
+LDFLAGS  = ${LIBS}
 
 all: csvr
 

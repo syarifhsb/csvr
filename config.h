@@ -69,14 +69,4 @@ static Key visualkey[] = {
   { 'l',         Visual,    movex,        {.i = +1}  },
 };
 
-static Key commandkey[] = {
-  /* ch             NextState  Function  Arg*/
-  { KEY_ENTER,      Normal,    cmddo,    {0} },
-  { 10,             Normal,    cmddo,    {0} },
-  { KEY_BACKSPACE,  Command,   cmddel,   {0} },
-  { CTRL('?'),      Command,   cmddel,   {0} },
-  { 127,            Command,   cmddel,   {0} },
-  { 27,             Command,   cmddel,   {0} },
-};
-
 #endif /* CONFIG_H */
