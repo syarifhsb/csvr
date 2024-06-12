@@ -13,6 +13,7 @@
  */
 
 #include <ncurses.h>
+#include <panel.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -29,9 +30,17 @@
 /* Enums and Structs */
 enum { Top, Bottom };  /* Pivot Y */
 enum { Left, Right };  /* Pivot X */
-enum { Normal, NormalCell, Visual, Insert, Command, Quit };  /* Program Mode */
+enum { Normal, NormalCell, Visual, Insert, Quit };  /* Program Mode */
+enum { HeaderWindow, CellWindow, TextWindow, DebugWindow, EndWindow }; /* Windows */
+enum { GotoPanel, EndPanel }; /* Panels */
 
-struct sheetparam {
+typedef struct windowparam {
+  WINDOW* windows[EndWindow];
+  PANEL* panels[EndPanel];
+  WINDOW* win_panels[EndPanel];
+} WINDOWPARAM;
+
+typedef struct sheetparam {
   int cellwinheight;
   int cellwinwidth;
   int cellwinupdate;
@@ -44,7 +53,7 @@ struct sheetparam {
   int pad; /* Row number Padding: includes number and the bar char: '25|' */
   int pivoty, pivotx;
   int ycov, xcov; /* part of cell that is hidden */
-};
+} SHEETPARAM;
 
 typedef struct {
   int width;
@@ -72,13 +81,14 @@ typedef struct {
 static void calcdim(void);
 static void cleanup(Data d);
 static void csvr_resize(const Arg *arg);
+/* static void gotopopup(const Arg *arg); */
 static void handlesig(int signal);
 static void headerupdate(void);
 static void keypress(int ch);
 static void movecell(int y, int x);
 static void movex(const Arg *arg);
 static void movey(const Arg *arg);
-static void repaint(void);
+static void recreate_windows(void);
 static void resizecell(int y, int x);
 static void resizecellx(const Arg *arg);
 static void resizecelly(const Arg *arg);
@@ -107,21 +117,17 @@ extern int errno;
 int height, width;
 static int textboxheight;
 Row rows[MAX_ROW];
-struct sheetparam st;
-/* static TABLE_ST *t = NULL; */
+SHEETPARAM st;
+WINDOWPARAM win_param_st;
 static Data d;
-WINDOW *headwin, *cellwin, *strlwin;
-#ifdef CSVR_DEBUG
-WINDOW *dbgwin;
-#endif /* CSVR_DEBUG */
 
 /* Function implementations */
 #ifdef CSVR_DEBUG
 void debugprint()
 {
-  werase(dbgwin);
-  mvwprintw(dbgwin, 0, 0, "%d", st.pad);
-  wrefresh(dbgwin);
+  werase(win_param_st.windows[DebugWindow]);
+  mvwprintw(win_param_st.windows[DebugWindow], 0, 0, "%d", st.pad);
+  wrefresh(win_param_st.windows[DebugWindow]);
   refresh();
 }
 #endif /* CSVR_DEBUG */
@@ -140,11 +146,11 @@ void calcdim()
   }
 
   int new_pad = get_digit(st.lastRow) + 1;
-  if (cellwin && st.pad - new_pad) {
+  if (win_param_st.windows[CellWindow] && st.pad - new_pad) {
     st.pad = new_pad;
     int new_width = width - st.pad;
     if (st.cellwinwidth - new_width) {
-      repaint();
+      recreate_windows();
     }
   } else {
     st.pad = new_pad;
@@ -177,11 +183,11 @@ void calcdim()
 
 void cleanup(Data d)
 {
-  delwin(cellwin);
-  delwin(headwin);
-  delwin(strlwin);
+  delwin(win_param_st.windows[CellWindow]);
+  delwin(win_param_st.windows[HeaderWindow]);
+  delwin(win_param_st.windows[TextWindow]);
 #ifdef CSVR_DEBUG
-  delwin(dbgwin);
+  delwin(win_param_st.windows[DebugWindow]);
 #endif /* CSVR_DEBUG */
   endwin();
 
@@ -191,7 +197,7 @@ void cleanup(Data d)
 void csvr_resize(const Arg *arg)
 {
   st.cellwinupdate = 1;
-  repaint();
+  recreate_windows();
 }
 
 void printcolindex(int i, int b, int w)
@@ -203,18 +209,27 @@ void printcolindex(int i, int b, int w)
 
   if (i / 26) {
     if ((b + w/2 - 2) >= 0)
-      mvwprintw(headwin, 0, b + w/2 - 2, "%c", 64 + (i / 26));
+      mvwprintw(win_param_st.windows[HeaderWindow], 0, b + w/2 - 2, "%c", 64 + (i / 26));
   }
   if ((b + w/2 - 1) >= 0)
-    mvwprintw(headwin, 0, b + w/2 - 1, "%c", 65 + (i % 26));
+    mvwprintw(win_param_st.windows[HeaderWindow], 0, b + w/2 - 1, "%c", 65 + (i % 26));
 }
+
+/* void gotopopup(const Arg *arg) */
+/* { */
+/*   int lines = 12, cols = 18, y = height/2 - lines/2, x = width/2 - cols/2; */
+/*   win_param_st.win_panels[GotoPanel] = newwin(lines, cols, y, x); */
+/*   win_param_st.panels[GotoPanel] = new_panel(win_param_st.win_panels[GotoPanel]); */
+/*   update_panels(); */
+/*   doupdate(); */
+/* } */
 
 void handlesig(int signal)
 {
-  if (csvr_state == Command) {
-    csvr_state = Normal;
-    curs_set(0);
-  }
+  /* if (csvr_state == Command) { */
+  /*   csvr_state = Normal; */
+  /*   curs_set(0); */
+  /* } */
 }
 
 void headerupdate()
@@ -223,21 +238,21 @@ void headerupdate()
 
   /* TODO: Row height != 1 */
   for (i = 0; i <= st.lastRow - st.begRow; i++){
-    wmove(headwin, i + 1, 0);
+    wmove(win_param_st.windows[HeaderWindow], i + 1, 0);
     for (j = 0; j < st.pad - (1 + get_digit(st.begRow + i)); j++){
-      wprintw(headwin, " ");
+      wprintw(win_param_st.windows[HeaderWindow], " ");
     }
-    wprintw(headwin, "%d|", st.begRow + i);
+    wprintw(win_param_st.windows[HeaderWindow], "%d|", st.begRow + i);
   }
 
-  wmove(headwin, 0, 0);
-  wclrtoeol(headwin);
+  wmove(win_param_st.windows[HeaderWindow], 0, 0);
+  wclrtoeol(win_param_st.windows[HeaderWindow]);
   int begin;
   if (st.pivotx == Left) {
     begin = st.pad;
     for (j = st.begCol; j <= st.lastCol; j++) {
       printcolindex(j - 1, begin, cols[j - 1].width);
-      mvwprintw(headwin, 0, begin + cols[j - 1].width - 1, "|");
+      mvwprintw(win_param_st.windows[HeaderWindow], 0, begin + cols[j - 1].width - 1, "|");
       begin += cols[j - 1].width;
     }
   } else if (st.pivotx == Right) {
@@ -245,17 +260,17 @@ void headerupdate()
     for (j = st.lastCol; j >= st.begCol; j--) {
       begin -= cols[j - 1].width;
       printcolindex(j - 1, begin, cols[j - 1].width);
-      mvwprintw(headwin, 0, begin + cols[j - 1].width - 1, "|");
+      mvwprintw(win_param_st.windows[HeaderWindow], 0, begin + cols[j - 1].width - 1, "|");
     }
   }
 
-  wmove(headwin, 0, 0);
+  wmove(win_param_st.windows[HeaderWindow], 0, 0);
   for (j = 0; j < st.pad - 1; j++) {
-    wprintw(headwin, " ");
+    wprintw(win_param_st.windows[HeaderWindow], " ");
   }
-  wprintw(headwin, "|");
+  wprintw(win_param_st.windows[HeaderWindow], "|");
 
-  wrefresh(headwin);
+  wrefresh(win_param_st.windows[HeaderWindow]);
 }
 
 void switchkeystate(int ch, int size, Key k[size])
@@ -360,31 +375,31 @@ void movey(const Arg *arg)
   movecell(arg->i, 0);
 }
 
-void repaint(void)
+void recreate_windows(void)
 {
-  delwin(cellwin);
-  delwin(headwin);
-  delwin(strlwin);
+  delwin(win_param_st.windows[CellWindow]);
+  delwin(win_param_st.windows[HeaderWindow]);
+  delwin(win_param_st.windows[TextWindow]);
 #ifdef CSVR_DEBUG
-  delwin(dbgwin);
+  delwin(win_param_st.windows[DebugWindow]);
 #endif /* CSVR_DEBUG */
 
   calcdim();
 
-  strlwin = newwin(textboxheight, width, 0, 0);
+  win_param_st.windows[TextWindow] = newwin(textboxheight, width, 0, 0);
 #ifdef CSVR_DEBUG
-  dbgwin  = newwin(dbgboxheight, width, height - 1, 0);
+  win_param_st.windows[DebugWindow]  = newwin(dbgboxheight, width, height - 1, 0);
 #endif /* CSVR_DEBUG */
-  headwin = newwin(height - (textboxheight + dbgboxheight), width, textboxheight, 0);
-  cellwin = newwin(height - (textboxheight + dbgboxheight + 1), width - st.pad,
+  win_param_st.windows[HeaderWindow] = newwin(height - (textboxheight + dbgboxheight), width, textboxheight, 0);
+  win_param_st.windows[CellWindow] = newwin(height - (textboxheight + dbgboxheight + 1), width - st.pad,
       textboxheight + 1, st.pad); /* 1 is the size of header */
 
   wbkgd(stdscr,  COLOR_PAIR(1));
   wbkgd(stdscr,  COLOR_PAIR(2));
-  wbkgd(strlwin, COLOR_PAIR(3));
-  wbkgd(headwin, COLOR_PAIR(4));
+  wbkgd(win_param_st.windows[TextWindow], COLOR_PAIR(3));
+  wbkgd(win_param_st.windows[HeaderWindow], COLOR_PAIR(4));
 #ifdef CSVR_DEBUG
-  wbkgd(dbgwin, COLOR_PAIR(3));
+  wbkgd(win_param_st.windows[DebugWindow], COLOR_PAIR(3));
 #endif /* CSVR_DEBUG */
 
   writecells();
@@ -495,7 +510,7 @@ void selectmultiplecell(int activate)
         if (j < minCol)
           begin += cols[j - 1].width;
       }
-      mvwchgat(cellwin, i - st.begRow, begin,
+      mvwchgat(win_param_st.windows[CellWindow], i - st.begRow, begin,
           end - begin, A_NORMAL, activate + 1, NULL);
     }
   } else if (st.pivotx == Right) {
@@ -509,7 +524,7 @@ void selectmultiplecell(int activate)
       }
       if (begin < 0)
         begin = 0;
-      mvwchgat(cellwin, i - st.begRow, begin,
+      mvwchgat(win_param_st.windows[CellWindow], i - st.begRow, begin,
           end - begin, A_NORMAL, activate + 1, NULL);
     }
   }
@@ -525,7 +540,7 @@ void selectsinglecell(int activate)
     for (int j = st.begCol; j < st.currentCol; j++) {
       begin += cols[j - 1].width;
     }
-    mvwchgat(cellwin, st.currentRow - st.begRow, begin,
+    mvwchgat(win_param_st.windows[CellWindow], st.currentRow - st.begRow, begin,
         cols[st.currentCol - 1].width,
         A_NORMAL, activate + 1, NULL);
   }
@@ -536,7 +551,7 @@ void selectsinglecell(int activate)
     }
     if (begin < 0)
       begin = 0;
-    mvwchgat(cellwin, st.currentRow - st.begRow,
+    mvwchgat(win_param_st.windows[CellWindow], st.currentRow - st.begRow,
         begin, cols[st.currentCol - 1].width,
         A_NORMAL, activate + 1, NULL);
   }
@@ -579,7 +594,7 @@ void setup()
     cols[i].width = CELL_WIDTH;
   }
 
-  repaint();
+  recreate_windows();
 }
 
 void usage(void)
@@ -615,7 +630,7 @@ void writecells()
   }
 
   if (st.cellwinupdate) {
-    werase(cellwin);
+    werase(win_param_st.windows[CellWindow]);
     for (int i = 0, yt = 0; i < st.lastRow - st.begRow + 1 && i < get_row(d) - st.begRow + 1; i++) {
       int cellheight = rows[st.begCol + i - 1].height;
       for (int j = 0, xt = 0; j < st.lastCol - st.begCol + 1 && j < get_col(d) - st.begCol + 1; j++) {
@@ -655,12 +670,12 @@ void writesinglecell(int y, int x, int height, int width, const char *str, size_
   /* TODO: Wrap text when have row height > 1 */
   char temp[strlen];
   snprintf(temp, width, str);
-    mvwprintw(cellwin, y, x, "%s", temp);
+  mvwprintw(win_param_st.windows[CellWindow], y, x, "%s", temp);
 }
 
 void writetextbox(void)
 {
-  wmove(strlwin, 0, 0); wclrtoeol(strlwin);
+  wmove(win_param_st.windows[TextWindow], 0, 0); wclrtoeol(win_param_st.windows[TextWindow]);
 
   if (text_is_not_empty(d) == 0)
     return;
@@ -669,8 +684,8 @@ void writetextbox(void)
     return;
 
   for (int i = 0; i < st.pad; i++)
-    wprintw(strlwin, " ");
-  wprintw(strlwin, "%s", get_str(d, st.currentRow, st.currentCol));
+    wprintw(win_param_st.windows[TextWindow], " ");
+  wprintw(win_param_st.windows[TextWindow], "%s", get_str(d, st.currentRow, st.currentCol));
 }
 
 int main(int argc, char **argv)
@@ -725,10 +740,10 @@ int main(int argc, char **argv)
     refresh();
     headerupdate();
 #ifdef CSVR_DEBUG
-    wrefresh(dbgwin);
+    wrefresh(win_param_st.windows[DebugWindow]);
 #endif /* CSVR_DEBUG */
-    wrefresh(cellwin);
-    wrefresh(strlwin);
+    wrefresh(win_param_st.windows[CellWindow]);
+    wrefresh(win_param_st.windows[TextWindow]);
 
     c = getch();
     if (c != ERR)

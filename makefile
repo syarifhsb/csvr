@@ -2,8 +2,8 @@ CC       = gcc --std=gnu99
 SRC      = csvr.c utils.c data.c
 OBJ      = ${SRC:.c=.o}
 OBJDEBUG = ${SRC:.c=debug.o}
-LIBS     = -lncurses
-CFLAGS   = -Wall 
+LIBS     = -lncurses -lpanel
+CFLAGS   = -Wall
 CDFLAGS  = -Wall -g -DCSVR_DEBUG
 LDFLAGS  = ${LIBS}
 

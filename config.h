@@ -41,6 +41,7 @@ static Key normalkey[] = {
   { '-',         Normal,    resizecellx,  {.i = -1}  },
   { '[',         Normal,    resizecelly,  {.i = -1}  },
   { ']',         Normal,    resizecelly,  {.i = +1}  },
+  /* { 'g',         Normal,    gotopopup,    {0}        }, */
   { 'h',         Normal,    movex,        {.i = -1}  },
   { 'j',         Normal,    movey,        {.i = +1}  },
   { 'k',         Normal,    movey,        {.i = -1}  },
